@@ -1,0 +1,1978 @@
+{
+  "method": "infinite_phmm_mcmc_K4_coupled_RE",
+  "params_key": "f1ecfc23e19e84fe",
+  "n_families": 11,
+  "elapsed_seconds": 15.440282821655273,
+  "per_family": [
+    {
+      "family": "BB11001",
+      "per_pair": [
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "name_i": "2lef_A",
+          "name_j": "1k99_A",
+          "len_i": 86,
+          "len_j": 91,
+          "opt_acc_e_tp": 29.0,
+          "opt_acc_total_mass": 83.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "name_i": "2lef_A",
+          "name_j": "1j46_A",
+          "len_i": 86,
+          "len_j": 85,
+          "opt_acc_e_tp": 29.0,
+          "opt_acc_total_mass": 83.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            0,
+            3
+          ],
+          "name_i": "2lef_A",
+          "name_j": "1aab_",
+          "len_i": 86,
+          "len_j": 83,
+          "opt_acc_e_tp": 28.0,
+          "opt_acc_total_mass": 75.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "name_i": "1k99_A",
+          "name_j": "1j46_A",
+          "len_i": 91,
+          "len_j": 85,
+          "opt_acc_e_tp": 29.0,
+          "opt_acc_total_mass": 85.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            1,
+            3
+          ],
+          "name_i": "1k99_A",
+          "name_j": "1aab_",
+          "len_i": 91,
+          "len_j": 83,
+          "opt_acc_e_tp": 29.0,
+          "opt_acc_total_mass": 81.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            2,
+            3
+          ],
+          "name_i": "1j46_A",
+          "name_j": "1aab_",
+          "len_i": 85,
+          "len_j": 83,
+          "opt_acc_e_tp": 15.0,
+          "opt_acc_total_mass": 76.0,
+          "gold": 29
+        }
+      ],
+      "msa_sp_g1": 1.0,
+      "msa_tc_g1": 1.0,
+      "msa_f1_g1": 0.5296803652968036,
+      "msa_sp_g1_std": 0.0,
+      "msa_tc_g1_std": 0.0,
+      "msa_f1_g1_std": 0.0,
+      "msa_sp_g1_per_seed": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "msa_tc_g1_per_seed": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "msa_f1_g1_per_seed": [
+        0.5296803652968036,
+        0.5296803652968036,
+        0.5296803652968036,
+        0.5296803652968036,
+        0.5296803652968036
+      ],
+      "msa_sp_g0": 1.0,
+      "msa_tc_g0": 1.0,
+      "msa_f1_g0": 0.5272727272727272,
+      "msa_sp_g0_std": 0.0,
+      "msa_tc_g0_std": 0.0,
+      "msa_f1_g0_std": 0.0,
+      "msa_sp_g0_per_seed": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "msa_tc_g0_per_seed": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "msa_f1_g0_per_seed": [
+        0.5272727272727272,
+        0.5272727272727272,
+        0.5272727272727272,
+        0.5272727272727272,
+        0.5272727272727272
+      ],
+      "time_s": 0.5226335525512695
+    },
+    {
+      "family": "BB11013",
+      "per_pair": [
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "name_i": "1jhg_A",
+          "name_j": "1hst_A",
+          "len_i": 101,
+          "len_j": 74,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 74.0,
+          "gold": 13
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "name_i": "1jhg_A",
+          "name_j": "1aoy_",
+          "len_i": 101,
+          "len_j": 78,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 77.0,
+          "gold": 13
+        },
+        {
+          "pair": [
+            0,
+            3
+          ],
+          "name_i": "1jhg_A",
+          "name_j": "1tc3_C",
+          "len_i": 101,
+          "len_j": 51,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 51.0,
+          "gold": 13
+        },
+        {
+          "pair": [
+            0,
+            4
+          ],
+          "name_i": "1jhg_A",
+          "name_j": "1idy_",
+          "len_i": 101,
+          "len_j": 54,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 54.0,
+          "gold": 13
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "name_i": "1hst_A",
+          "name_j": "1aoy_",
+          "len_i": 74,
+          "len_j": 78,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 69.0,
+          "gold": 13
+        },
+        {
+          "pair": [
+            1,
+            3
+          ],
+          "name_i": "1hst_A",
+          "name_j": "1tc3_C",
+          "len_i": 74,
+          "len_j": 51,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 51.0,
+          "gold": 13
+        },
+        {
+          "pair": [
+            1,
+            4
+          ],
+          "name_i": "1hst_A",
+          "name_j": "1idy_",
+          "len_i": 74,
+          "len_j": 54,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 54.0,
+          "gold": 13
+        },
+        {
+          "pair": [
+            2,
+            3
+          ],
+          "name_i": "1aoy_",
+          "name_j": "1tc3_C",
+          "len_i": 78,
+          "len_j": 51,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 51.0,
+          "gold": 13
+        },
+        {
+          "pair": [
+            2,
+            4
+          ],
+          "name_i": "1aoy_",
+          "name_j": "1idy_",
+          "len_i": 78,
+          "len_j": 54,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 48.0,
+          "gold": 13
+        },
+        {
+          "pair": [
+            3,
+            4
+          ],
+          "name_i": "1tc3_C",
+          "name_j": "1idy_",
+          "len_i": 51,
+          "len_j": 54,
+          "opt_acc_e_tp": 8.0,
+          "opt_acc_total_mass": 50.0,
+          "gold": 13
+        }
+      ],
+      "msa_sp_g1": 0.06153846153846154,
+      "msa_tc_g1": 0.0,
+      "msa_f1_g1": 0.0254930986349007,
+      "msa_sp_g1_std": 0.0,
+      "msa_tc_g1_std": 0.0,
+      "msa_f1_g1_std": 0.00043595827753203464,
+      "msa_sp_g1_per_seed": [
+        0.06153846153846154,
+        0.06153846153846154,
+        0.06153846153846154,
+        0.06153846153846154,
+        0.06153846153846154
+      ],
+      "msa_tc_g1_per_seed": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "msa_f1_g1_per_seed": [
+        0.025196850393700787,
+        0.02527646129541864,
+        0.025356576862123614,
+        0.026359143327841845,
+        0.02527646129541864
+      ],
+      "msa_sp_g0": 0.06153846153846154,
+      "msa_tc_g0": 0.0,
+      "msa_f1_g0": 0.025449455374972833,
+      "msa_sp_g0_std": 0.0,
+      "msa_tc_g0_std": 0.0,
+      "msa_f1_g0_std": 0.0005494141848339695,
+      "msa_sp_g0_per_seed": [
+        0.06153846153846154,
+        0.06153846153846154,
+        0.06153846153846154,
+        0.06153846153846154,
+        0.06153846153846154
+      ],
+      "msa_tc_g0_per_seed": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "msa_f1_g0_per_seed": [
+        0.02576489533011272,
+        0.02576489533011272,
+        0.025682182985553772,
+        0.0243531202435312,
+        0.025682182985553772
+      ],
+      "time_s": 1.702888011932373
+    },
+    {
+      "family": "BB12014",
+      "per_pair": [
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "name_i": "1akh_A",
+          "name_j": "1ftt_",
+          "len_i": 49,
+          "len_j": 68,
+          "opt_acc_e_tp": 31.0,
+          "opt_acc_total_mass": 49.0,
+          "gold": 37
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "name_i": "1akh_A",
+          "name_j": "1mnm_C",
+          "len_i": 49,
+          "len_j": 78,
+          "opt_acc_e_tp": 23.0,
+          "opt_acc_total_mass": 49.0,
+          "gold": 37
+        },
+        {
+          "pair": [
+            0,
+            3
+          ],
+          "name_i": "1akh_A",
+          "name_j": "1ftz_",
+          "len_i": 49,
+          "len_j": 70,
+          "opt_acc_e_tp": 31.0,
+          "opt_acc_total_mass": 49.0,
+          "gold": 37
+        },
+        {
+          "pair": [
+            0,
+            4
+          ],
+          "name_i": "1akh_A",
+          "name_j": "1bw5_",
+          "len_i": 49,
+          "len_j": 66,
+          "opt_acc_e_tp": 28.0,
+          "opt_acc_total_mass": 49.0,
+          "gold": 37
+        },
+        {
+          "pair": [
+            0,
+            5
+          ],
+          "name_i": "1akh_A",
+          "name_j": "1fjl_A",
+          "len_i": 49,
+          "len_j": 65,
+          "opt_acc_e_tp": 31.0,
+          "opt_acc_total_mass": 49.0,
+          "gold": 37
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "name_i": "1ftt_",
+          "name_j": "1mnm_C",
+          "len_i": 68,
+          "len_j": 78,
+          "opt_acc_e_tp": 36.0,
+          "opt_acc_total_mass": 59.0,
+          "gold": 37
+        },
+        {
+          "pair": [
+            1,
+            3
+          ],
+          "name_i": "1ftt_",
+          "name_j": "1ftz_",
+          "len_i": 68,
+          "len_j": 70,
+          "opt_acc_e_tp": 37.0,
+          "opt_acc_total_mass": 68.0,
+          "gold": 37
+        },
+        {
+          "pair": [
+            1,
+            4
+          ],
+          "name_i": "1ftt_",
+          "name_j": "1bw5_",
+          "len_i": 68,
+          "len_j": 66,
+          "opt_acc_e_tp": 37.0,
+          "opt_acc_total_mass": 65.0,
+          "gold": 37
+        },
+        {
+          "pair": [
+            1,
+            5
+          ],
+          "name_i": "1ftt_",
+          "name_j": "1fjl_A",
+          "len_i": 68,
+          "len_j": 65,
+          "opt_acc_e_tp": 37.0,
+          "opt_acc_total_mass": 65.0,
+          "gold": 37
+        },
+        {
+          "pair": [
+            2,
+            3
+          ],
+          "name_i": "1mnm_C",
+          "name_j": "1ftz_",
+          "len_i": 78,
+          "len_j": 70,
+          "opt_acc_e_tp": 23.0,
+          "opt_acc_total_mass": 60.0,
+          "gold": 37
+        },
+        {
+          "pair": [
+            2,
+            4
+          ],
+          "name_i": "1mnm_C",
+          "name_j": "1bw5_",
+          "len_i": 78,
+          "len_j": 66,
+          "opt_acc_e_tp": 36.0,
+          "opt_acc_total_mass": 60.0,
+          "gold": 37
+        },
+        {
+          "pair": [
+            2,
+            5
+          ],
+          "name_i": "1mnm_C",
+          "name_j": "1fjl_A",
+          "len_i": 78,
+          "len_j": 65,
+          "opt_acc_e_tp": 36.0,
+          "opt_acc_total_mass": 59.0,
+          "gold": 37
+        },
+        {
+          "pair": [
+            3,
+            4
+          ],
+          "name_i": "1ftz_",
+          "name_j": "1bw5_",
+          "len_i": 70,
+          "len_j": 66,
+          "opt_acc_e_tp": 37.0,
+          "opt_acc_total_mass": 66.0,
+          "gold": 37
+        },
+        {
+          "pair": [
+            3,
+            5
+          ],
+          "name_i": "1ftz_",
+          "name_j": "1fjl_A",
+          "len_i": 70,
+          "len_j": 65,
+          "opt_acc_e_tp": 37.0,
+          "opt_acc_total_mass": 65.0,
+          "gold": 37
+        },
+        {
+          "pair": [
+            4,
+            5
+          ],
+          "name_i": "1bw5_",
+          "name_j": "1fjl_A",
+          "len_i": 66,
+          "len_j": 65,
+          "opt_acc_e_tp": 37.0,
+          "opt_acc_total_mass": 65.0,
+          "gold": 37
+        }
+      ],
+      "msa_sp_g1": 0.9369369369369369,
+      "msa_tc_g1": 0.8108108108108109,
+      "msa_f1_g1": 0.7360226468506723,
+      "msa_sp_g1_std": 0.0,
+      "msa_tc_g1_std": 0.0,
+      "msa_f1_g1_std": 0.0,
+      "msa_sp_g1_per_seed": [
+        0.9369369369369369,
+        0.9369369369369369,
+        0.9369369369369369,
+        0.9369369369369369,
+        0.9369369369369369
+      ],
+      "msa_tc_g1_per_seed": [
+        0.8108108108108109,
+        0.8108108108108109,
+        0.8108108108108109,
+        0.8108108108108109,
+        0.8108108108108109
+      ],
+      "msa_f1_g1_per_seed": [
+        0.7360226468506723,
+        0.7360226468506723,
+        0.7360226468506723,
+        0.7360226468506723,
+        0.7360226468506723
+      ],
+      "msa_sp_g0": 0.9369369369369369,
+      "msa_tc_g0": 0.8108108108108109,
+      "msa_f1_g0": 0.7272727272727273,
+      "msa_sp_g0_std": 0.0,
+      "msa_tc_g0_std": 0.0,
+      "msa_f1_g0_std": 0.0,
+      "msa_sp_g0_per_seed": [
+        0.9369369369369369,
+        0.9369369369369369,
+        0.9369369369369369,
+        0.9369369369369369,
+        0.9369369369369369
+      ],
+      "msa_tc_g0_per_seed": [
+        0.8108108108108109,
+        0.8108108108108109,
+        0.8108108108108109,
+        0.8108108108108109,
+        0.8108108108108109
+      ],
+      "msa_f1_g0_per_seed": [
+        0.7272727272727273,
+        0.7272727272727273,
+        0.7272727272727273,
+        0.7272727272727273,
+        0.7272727272727273
+      ],
+      "time_s": 1.078813076019287
+    },
+    {
+      "family": "BB12021",
+      "per_pair": [
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "name_i": "1hlq_A",
+          "name_j": "1hip_",
+          "len_i": 75,
+          "len_j": 85,
+          "opt_acc_e_tp": 49.0,
+          "opt_acc_total_mass": 75.0,
+          "gold": 51
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "name_i": "1hlq_A",
+          "name_j": "2hip_A",
+          "len_i": 75,
+          "len_j": 71,
+          "opt_acc_e_tp": 44.0,
+          "opt_acc_total_mass": 68.0,
+          "gold": 51
+        },
+        {
+          "pair": [
+            0,
+            3
+          ],
+          "name_i": "1hlq_A",
+          "name_j": "1hpi_",
+          "len_i": 75,
+          "len_j": 71,
+          "opt_acc_e_tp": 44.0,
+          "opt_acc_total_mass": 70.0,
+          "gold": 51
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "name_i": "1hip_",
+          "name_j": "2hip_A",
+          "len_i": 85,
+          "len_j": 71,
+          "opt_acc_e_tp": 44.0,
+          "opt_acc_total_mass": 69.0,
+          "gold": 51
+        },
+        {
+          "pair": [
+            1,
+            3
+          ],
+          "name_i": "1hip_",
+          "name_j": "1hpi_",
+          "len_i": 85,
+          "len_j": 71,
+          "opt_acc_e_tp": 47.0,
+          "opt_acc_total_mass": 71.0,
+          "gold": 51
+        },
+        {
+          "pair": [
+            2,
+            3
+          ],
+          "name_i": "2hip_A",
+          "name_j": "1hpi_",
+          "len_i": 71,
+          "len_j": 71,
+          "opt_acc_e_tp": 43.0,
+          "opt_acc_total_mass": 67.0,
+          "gold": 51
+        }
+      ],
+      "msa_sp_g1": 0.9084967320261438,
+      "msa_tc_g1": 0.8431372549019608,
+      "msa_f1_g1": 0.7754532775453278,
+      "msa_sp_g1_std": 0.0,
+      "msa_tc_g1_std": 0.0,
+      "msa_f1_g1_std": 0.0,
+      "msa_sp_g1_per_seed": [
+        0.9084967320261438,
+        0.9084967320261438,
+        0.9084967320261438,
+        0.9084967320261438,
+        0.9084967320261438
+      ],
+      "msa_tc_g1_per_seed": [
+        0.8431372549019608,
+        0.8431372549019608,
+        0.8431372549019608,
+        0.8431372549019608,
+        0.8431372549019608
+      ],
+      "msa_f1_g1_per_seed": [
+        0.7754532775453278,
+        0.7754532775453278,
+        0.7754532775453278,
+        0.7754532775453278,
+        0.7754532775453278
+      ],
+      "msa_sp_g0": 0.9084967320261438,
+      "msa_tc_g0": 0.8431372549019608,
+      "msa_f1_g0": 0.7690179806362379,
+      "msa_sp_g0_std": 0.0,
+      "msa_tc_g0_std": 0.0,
+      "msa_f1_g0_std": 0.0,
+      "msa_sp_g0_per_seed": [
+        0.9084967320261438,
+        0.9084967320261438,
+        0.9084967320261438,
+        0.9084967320261438,
+        0.9084967320261438
+      ],
+      "msa_tc_g0_per_seed": [
+        0.8431372549019608,
+        0.8431372549019608,
+        0.8431372549019608,
+        0.8431372549019608,
+        0.8431372549019608
+      ],
+      "msa_f1_g0_per_seed": [
+        0.7690179806362379,
+        0.7690179806362379,
+        0.7690179806362379,
+        0.7690179806362379,
+        0.7690179806362379
+      ],
+      "time_s": 0.7393953800201416
+    },
+    {
+      "family": "BB12032",
+      "per_pair": [
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "name_i": "1drs_",
+          "name_j": "1cb9_A",
+          "len_i": 59,
+          "len_j": 60,
+          "opt_acc_e_tp": 18.0,
+          "opt_acc_total_mass": 55.0,
+          "gold": 18
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "name_i": "1drs_",
+          "name_j": "1fas_",
+          "len_i": 59,
+          "len_j": 61,
+          "opt_acc_e_tp": 18.0,
+          "opt_acc_total_mass": 58.0,
+          "gold": 18
+        },
+        {
+          "pair": [
+            0,
+            3
+          ],
+          "name_i": "1drs_",
+          "name_j": "1kba_A",
+          "len_i": 59,
+          "len_j": 66,
+          "opt_acc_e_tp": 14.0,
+          "opt_acc_total_mass": 58.0,
+          "gold": 18
+        },
+        {
+          "pair": [
+            0,
+            4
+          ],
+          "name_i": "1drs_",
+          "name_j": "1cod_",
+          "len_i": 59,
+          "len_j": 62,
+          "opt_acc_e_tp": 18.0,
+          "opt_acc_total_mass": 58.0,
+          "gold": 18
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "name_i": "1cb9_A",
+          "name_j": "1fas_",
+          "len_i": 60,
+          "len_j": 61,
+          "opt_acc_e_tp": 14.0,
+          "opt_acc_total_mass": 59.0,
+          "gold": 18
+        },
+        {
+          "pair": [
+            1,
+            3
+          ],
+          "name_i": "1cb9_A",
+          "name_j": "1kba_A",
+          "len_i": 60,
+          "len_j": 66,
+          "opt_acc_e_tp": 16.0,
+          "opt_acc_total_mass": 58.0,
+          "gold": 18
+        },
+        {
+          "pair": [
+            1,
+            4
+          ],
+          "name_i": "1cb9_A",
+          "name_j": "1cod_",
+          "len_i": 60,
+          "len_j": 62,
+          "opt_acc_e_tp": 17.0,
+          "opt_acc_total_mass": 58.0,
+          "gold": 18
+        },
+        {
+          "pair": [
+            2,
+            3
+          ],
+          "name_i": "1fas_",
+          "name_j": "1kba_A",
+          "len_i": 61,
+          "len_j": 66,
+          "opt_acc_e_tp": 13.0,
+          "opt_acc_total_mass": 59.0,
+          "gold": 18
+        },
+        {
+          "pair": [
+            2,
+            4
+          ],
+          "name_i": "1fas_",
+          "name_j": "1cod_",
+          "len_i": 61,
+          "len_j": 62,
+          "opt_acc_e_tp": 18.0,
+          "opt_acc_total_mass": 60.0,
+          "gold": 18
+        },
+        {
+          "pair": [
+            3,
+            4
+          ],
+          "name_i": "1kba_A",
+          "name_j": "1cod_",
+          "len_i": 66,
+          "len_j": 62,
+          "opt_acc_e_tp": 16.0,
+          "opt_acc_total_mass": 59.0,
+          "gold": 18
+        }
+      ],
+      "msa_sp_g1": 0.9,
+      "msa_tc_g1": 0.8333333333333334,
+      "msa_f1_g1": 0.4337349397590361,
+      "msa_sp_g1_std": 0.0,
+      "msa_tc_g1_std": 0.0,
+      "msa_f1_g1_std": 5.551115123125783e-17,
+      "msa_sp_g1_per_seed": [
+        0.9,
+        0.9,
+        0.9,
+        0.9,
+        0.9
+      ],
+      "msa_tc_g1_per_seed": [
+        0.8333333333333334,
+        0.8333333333333334,
+        0.8333333333333334,
+        0.8333333333333334,
+        0.8333333333333334
+      ],
+      "msa_f1_g1_per_seed": [
+        0.43373493975903615,
+        0.43373493975903615,
+        0.43373493975903615,
+        0.43373493975903615,
+        0.43373493975903615
+      ],
+      "msa_sp_g0": 0.9,
+      "msa_tc_g0": 0.8333333333333334,
+      "msa_f1_g0": 0.4337349397590361,
+      "msa_sp_g0_std": 0.0,
+      "msa_tc_g0_std": 0.0,
+      "msa_f1_g0_std": 5.551115123125783e-17,
+      "msa_sp_g0_per_seed": [
+        0.9,
+        0.9,
+        0.9,
+        0.9,
+        0.9
+      ],
+      "msa_tc_g0_per_seed": [
+        0.8333333333333334,
+        0.8333333333333334,
+        0.8333333333333334,
+        0.8333333333333334,
+        0.8333333333333334
+      ],
+      "msa_f1_g0_per_seed": [
+        0.43373493975903615,
+        0.43373493975903615,
+        0.43373493975903615,
+        0.43373493975903615,
+        0.43373493975903615
+      ],
+      "time_s": 0.6683456897735596
+    },
+    {
+      "family": "BB12041",
+      "per_pair": [
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "name_i": "1gyo_A",
+          "name_j": "1wad_",
+          "len_i": 107,
+          "len_j": 111,
+          "opt_acc_e_tp": 49.0,
+          "opt_acc_total_mass": 101.0,
+          "gold": 66
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "name_i": "1gyo_A",
+          "name_j": "1czj_",
+          "len_i": 107,
+          "len_j": 110,
+          "opt_acc_e_tp": 64.0,
+          "opt_acc_total_mass": 106.0,
+          "gold": 66
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "name_i": "1wad_",
+          "name_j": "1czj_",
+          "len_i": 111,
+          "len_j": 110,
+          "opt_acc_e_tp": 56.0,
+          "opt_acc_total_mass": 105.0,
+          "gold": 66
+        }
+      ],
+      "msa_sp_g1": 0.8484848484848484,
+      "msa_tc_g1": 0.7727272727272727,
+      "msa_f1_g1": 0.6627218934911243,
+      "msa_sp_g1_std": 1.1102230246251565e-16,
+      "msa_tc_g1_std": 0.0,
+      "msa_f1_g1_std": 0.0,
+      "msa_sp_g1_per_seed": [
+        0.8484848484848485,
+        0.8484848484848485,
+        0.8484848484848485,
+        0.8484848484848485,
+        0.8484848484848485
+      ],
+      "msa_tc_g1_per_seed": [
+        0.7727272727272727,
+        0.7727272727272727,
+        0.7727272727272727,
+        0.7727272727272727,
+        0.7727272727272727
+      ],
+      "msa_f1_g1_per_seed": [
+        0.6627218934911243,
+        0.6627218934911243,
+        0.6627218934911243,
+        0.6627218934911243,
+        0.6627218934911243
+      ],
+      "msa_sp_g0": 0.8484848484848484,
+      "msa_tc_g0": 0.7727272727272727,
+      "msa_f1_g0": 0.6627218934911243,
+      "msa_sp_g0_std": 1.1102230246251565e-16,
+      "msa_tc_g0_std": 0.0,
+      "msa_f1_g0_std": 0.0,
+      "msa_sp_g0_per_seed": [
+        0.8484848484848485,
+        0.8484848484848485,
+        0.8484848484848485,
+        0.8484848484848485,
+        0.8484848484848485
+      ],
+      "msa_tc_g0_per_seed": [
+        0.7727272727272727,
+        0.7727272727272727,
+        0.7727272727272727,
+        0.7727272727272727,
+        0.7727272727272727
+      ],
+      "msa_f1_g0_per_seed": [
+        0.6627218934911243,
+        0.6627218934911243,
+        0.6627218934911243,
+        0.6627218934911243,
+        0.6627218934911243
+      ],
+      "time_s": 0.9876449108123779
+    },
+    {
+      "family": "BB20001",
+      "per_pair": [
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "name_i": "2lef_A",
+          "name_j": "1e7j_A",
+          "len_i": 86,
+          "len_j": 74,
+          "opt_acc_e_tp": 33.0,
+          "opt_acc_total_mass": 71.0,
+          "gold": 39
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "name_i": "2lef_A",
+          "name_j": "1aab_",
+          "len_i": 86,
+          "len_j": 83,
+          "opt_acc_e_tp": 37.0,
+          "opt_acc_total_mass": 75.0,
+          "gold": 39
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "name_i": "1e7j_A",
+          "name_j": "1aab_",
+          "len_i": 74,
+          "len_j": 83,
+          "opt_acc_e_tp": 38.0,
+          "opt_acc_total_mass": 74.0,
+          "gold": 39
+        }
+      ],
+      "msa_sp_g1": 0.9829059829059827,
+      "msa_tc_g1": 0.9743589743589742,
+      "msa_f1_g1": 0.696969696969697,
+      "msa_sp_g1_std": 1.1102230246251565e-16,
+      "msa_tc_g1_std": 1.1102230246251565e-16,
+      "msa_f1_g1_std": 0.0,
+      "msa_sp_g1_per_seed": [
+        0.9829059829059829,
+        0.9829059829059829,
+        0.9829059829059829,
+        0.9829059829059829,
+        0.9829059829059829
+      ],
+      "msa_tc_g1_per_seed": [
+        0.9743589743589743,
+        0.9743589743589743,
+        0.9743589743589743,
+        0.9743589743589743,
+        0.9743589743589743
+      ],
+      "msa_f1_g1_per_seed": [
+        0.696969696969697,
+        0.696969696969697,
+        0.696969696969697,
+        0.696969696969697,
+        0.696969696969697
+      ],
+      "msa_sp_g0": 0.9829059829059827,
+      "msa_tc_g0": 0.9743589743589742,
+      "msa_f1_g0": 0.696969696969697,
+      "msa_sp_g0_std": 1.1102230246251565e-16,
+      "msa_tc_g0_std": 1.1102230246251565e-16,
+      "msa_f1_g0_std": 0.0,
+      "msa_sp_g0_per_seed": [
+        0.9829059829059829,
+        0.9829059829059829,
+        0.9829059829059829,
+        0.9829059829059829,
+        0.9829059829059829
+      ],
+      "msa_tc_g0_per_seed": [
+        0.9743589743589743,
+        0.9743589743589743,
+        0.9743589743589743,
+        0.9743589743589743,
+        0.9743589743589743
+      ],
+      "msa_f1_g0_per_seed": [
+        0.696969696969697,
+        0.696969696969697,
+        0.696969696969697,
+        0.696969696969697,
+        0.696969696969697
+      ],
+      "time_s": 0.6270825862884521
+    },
+    {
+      "family": "BB20008",
+      "per_pair": [
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "name_i": "1lui_A",
+          "name_j": "2pna_",
+          "len_i": 108,
+          "len_j": 104,
+          "opt_acc_e_tp": 20.0,
+          "opt_acc_total_mass": 96.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "name_i": "1lui_A",
+          "name_j": "2pld_A",
+          "len_i": 108,
+          "len_j": 105,
+          "opt_acc_e_tp": 25.0,
+          "opt_acc_total_mass": 98.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            0,
+            3
+          ],
+          "name_i": "1lui_A",
+          "name_j": "1ab2_",
+          "len_i": 108,
+          "len_j": 109,
+          "opt_acc_e_tp": 29.0,
+          "opt_acc_total_mass": 99.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            0,
+            4
+          ],
+          "name_i": "1lui_A",
+          "name_j": "1ju5_A",
+          "len_i": 108,
+          "len_j": 109,
+          "opt_acc_e_tp": 27.0,
+          "opt_acc_total_mass": 93.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            0,
+            5
+          ],
+          "name_i": "1lui_A",
+          "name_j": "1bm2_A",
+          "len_i": 108,
+          "len_j": 98,
+          "opt_acc_e_tp": 27.0,
+          "opt_acc_total_mass": 97.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            0,
+            6
+          ],
+          "name_i": "1lui_A",
+          "name_j": "1aya_A",
+          "len_i": 108,
+          "len_j": 101,
+          "opt_acc_e_tp": 24.0,
+          "opt_acc_total_mass": 94.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            0,
+            7
+          ],
+          "name_i": "1lui_A",
+          "name_j": "1d4t_A",
+          "len_i": 108,
+          "len_j": 104,
+          "opt_acc_e_tp": 22.0,
+          "opt_acc_total_mass": 100.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "name_i": "2pna_",
+          "name_j": "2pld_A",
+          "len_i": 104,
+          "len_j": 105,
+          "opt_acc_e_tp": 24.0,
+          "opt_acc_total_mass": 96.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            1,
+            3
+          ],
+          "name_i": "2pna_",
+          "name_j": "1ab2_",
+          "len_i": 104,
+          "len_j": 109,
+          "opt_acc_e_tp": 29.0,
+          "opt_acc_total_mass": 98.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            1,
+            4
+          ],
+          "name_i": "2pna_",
+          "name_j": "1ju5_A",
+          "len_i": 104,
+          "len_j": 109,
+          "opt_acc_e_tp": 22.0,
+          "opt_acc_total_mass": 91.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            1,
+            5
+          ],
+          "name_i": "2pna_",
+          "name_j": "1bm2_A",
+          "len_i": 104,
+          "len_j": 98,
+          "opt_acc_e_tp": 25.0,
+          "opt_acc_total_mass": 97.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            1,
+            6
+          ],
+          "name_i": "2pna_",
+          "name_j": "1aya_A",
+          "len_i": 104,
+          "len_j": 101,
+          "opt_acc_e_tp": 29.0,
+          "opt_acc_total_mass": 98.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            1,
+            7
+          ],
+          "name_i": "2pna_",
+          "name_j": "1d4t_A",
+          "len_i": 104,
+          "len_j": 104,
+          "opt_acc_e_tp": 25.0,
+          "opt_acc_total_mass": 97.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            2,
+            3
+          ],
+          "name_i": "2pld_A",
+          "name_j": "1ab2_",
+          "len_i": 105,
+          "len_j": 109,
+          "opt_acc_e_tp": 25.0,
+          "opt_acc_total_mass": 104.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            2,
+            4
+          ],
+          "name_i": "2pld_A",
+          "name_j": "1ju5_A",
+          "len_i": 105,
+          "len_j": 109,
+          "opt_acc_e_tp": 29.0,
+          "opt_acc_total_mass": 90.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            2,
+            5
+          ],
+          "name_i": "2pld_A",
+          "name_j": "1bm2_A",
+          "len_i": 105,
+          "len_j": 98,
+          "opt_acc_e_tp": 29.0,
+          "opt_acc_total_mass": 96.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            2,
+            6
+          ],
+          "name_i": "2pld_A",
+          "name_j": "1aya_A",
+          "len_i": 105,
+          "len_j": 101,
+          "opt_acc_e_tp": 27.0,
+          "opt_acc_total_mass": 93.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            2,
+            7
+          ],
+          "name_i": "2pld_A",
+          "name_j": "1d4t_A",
+          "len_i": 105,
+          "len_j": 104,
+          "opt_acc_e_tp": 25.0,
+          "opt_acc_total_mass": 96.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            3,
+            4
+          ],
+          "name_i": "1ab2_",
+          "name_j": "1ju5_A",
+          "len_i": 109,
+          "len_j": 109,
+          "opt_acc_e_tp": 29.0,
+          "opt_acc_total_mass": 91.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            3,
+            5
+          ],
+          "name_i": "1ab2_",
+          "name_j": "1bm2_A",
+          "len_i": 109,
+          "len_j": 98,
+          "opt_acc_e_tp": 29.0,
+          "opt_acc_total_mass": 97.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            3,
+            6
+          ],
+          "name_i": "1ab2_",
+          "name_j": "1aya_A",
+          "len_i": 109,
+          "len_j": 101,
+          "opt_acc_e_tp": 25.0,
+          "opt_acc_total_mass": 93.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            3,
+            7
+          ],
+          "name_i": "1ab2_",
+          "name_j": "1d4t_A",
+          "len_i": 109,
+          "len_j": 104,
+          "opt_acc_e_tp": 29.0,
+          "opt_acc_total_mass": 98.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            4,
+            5
+          ],
+          "name_i": "1ju5_A",
+          "name_j": "1bm2_A",
+          "len_i": 109,
+          "len_j": 98,
+          "opt_acc_e_tp": 29.0,
+          "opt_acc_total_mass": 91.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            4,
+            6
+          ],
+          "name_i": "1ju5_A",
+          "name_j": "1aya_A",
+          "len_i": 109,
+          "len_j": 101,
+          "opt_acc_e_tp": 25.0,
+          "opt_acc_total_mass": 91.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            4,
+            7
+          ],
+          "name_i": "1ju5_A",
+          "name_j": "1d4t_A",
+          "len_i": 109,
+          "len_j": 104,
+          "opt_acc_e_tp": 24.0,
+          "opt_acc_total_mass": 98.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            5,
+            6
+          ],
+          "name_i": "1bm2_A",
+          "name_j": "1aya_A",
+          "len_i": 98,
+          "len_j": 101,
+          "opt_acc_e_tp": 26.0,
+          "opt_acc_total_mass": 94.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            5,
+            7
+          ],
+          "name_i": "1bm2_A",
+          "name_j": "1d4t_A",
+          "len_i": 98,
+          "len_j": 104,
+          "opt_acc_e_tp": 29.0,
+          "opt_acc_total_mass": 98.0,
+          "gold": 29
+        },
+        {
+          "pair": [
+            6,
+            7
+          ],
+          "name_i": "1aya_A",
+          "name_j": "1d4t_A",
+          "len_i": 101,
+          "len_j": 104,
+          "opt_acc_e_tp": 25.0,
+          "opt_acc_total_mass": 95.0,
+          "gold": 29
+        }
+      ],
+      "msa_sp_g1": 0.8608374384236454,
+      "msa_tc_g1": 0.6551724137931034,
+      "msa_f1_g1": 0.411660777385159,
+      "msa_sp_g1_std": 0.0,
+      "msa_tc_g1_std": 0.0,
+      "msa_f1_g1_std": 0.0,
+      "msa_sp_g1_per_seed": [
+        0.8608374384236454,
+        0.8608374384236454,
+        0.8608374384236454,
+        0.8608374384236454,
+        0.8608374384236454
+      ],
+      "msa_tc_g1_per_seed": [
+        0.6551724137931034,
+        0.6551724137931034,
+        0.6551724137931034,
+        0.6551724137931034,
+        0.6551724137931034
+      ],
+      "msa_f1_g1_per_seed": [
+        0.411660777385159,
+        0.411660777385159,
+        0.411660777385159,
+        0.411660777385159,
+        0.411660777385159
+      ],
+      "msa_sp_g0": 0.8608374384236454,
+      "msa_tc_g0": 0.6551724137931034,
+      "msa_f1_g0": 0.4114184814596822,
+      "msa_sp_g0_std": 0.0,
+      "msa_tc_g0_std": 0.0,
+      "msa_f1_g0_std": 0.0,
+      "msa_sp_g0_per_seed": [
+        0.8608374384236454,
+        0.8608374384236454,
+        0.8608374384236454,
+        0.8608374384236454,
+        0.8608374384236454
+      ],
+      "msa_tc_g0_per_seed": [
+        0.6551724137931034,
+        0.6551724137931034,
+        0.6551724137931034,
+        0.6551724137931034,
+        0.6551724137931034
+      ],
+      "msa_f1_g0_per_seed": [
+        0.4114184814596822,
+        0.4114184814596822,
+        0.4114184814596822,
+        0.4114184814596822,
+        0.4114184814596822
+      ],
+      "time_s": 4.840271949768066
+    },
+    {
+      "family": "BB20015",
+      "per_pair": [
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "name_i": "1jhg_A",
+          "name_j": "1hst_A",
+          "len_i": 101,
+          "len_j": 74,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 74.0,
+          "gold": 11
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "name_i": "1jhg_A",
+          "name_j": "1aoy_",
+          "len_i": 101,
+          "len_j": 78,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 77.0,
+          "gold": 11
+        },
+        {
+          "pair": [
+            0,
+            3
+          ],
+          "name_i": "1jhg_A",
+          "name_j": "1idy_",
+          "len_i": 101,
+          "len_j": 54,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 54.0,
+          "gold": 11
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "name_i": "1hst_A",
+          "name_j": "1aoy_",
+          "len_i": 74,
+          "len_j": 78,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 69.0,
+          "gold": 11
+        },
+        {
+          "pair": [
+            1,
+            3
+          ],
+          "name_i": "1hst_A",
+          "name_j": "1idy_",
+          "len_i": 74,
+          "len_j": 54,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 54.0,
+          "gold": 11
+        },
+        {
+          "pair": [
+            2,
+            3
+          ],
+          "name_i": "1aoy_",
+          "name_j": "1idy_",
+          "len_i": 78,
+          "len_j": 54,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 48.0,
+          "gold": 11
+        }
+      ],
+      "msa_sp_g1": 0.0,
+      "msa_tc_g1": 0.0,
+      "msa_f1_g1": 0.0,
+      "msa_sp_g1_std": 0.0,
+      "msa_tc_g1_std": 0.0,
+      "msa_f1_g1_std": 0.0,
+      "msa_sp_g1_per_seed": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "msa_tc_g1_per_seed": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "msa_f1_g1_per_seed": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "msa_sp_g0": 0.0,
+      "msa_tc_g0": 0.0,
+      "msa_f1_g0": 0.0,
+      "msa_sp_g0_std": 0.0,
+      "msa_tc_g0_std": 0.0,
+      "msa_f1_g0_std": 0.0,
+      "msa_sp_g0_per_seed": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "msa_tc_g0_per_seed": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "msa_f1_g0_per_seed": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "time_s": 1.0388209819793701
+    },
+    {
+      "family": "BB20030",
+      "per_pair": [
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "name_i": "1ubi_",
+          "name_j": "1gua_B",
+          "len_i": 76,
+          "len_j": 77,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 76.0,
+          "gold": 12
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "name_i": "1ubi_",
+          "name_j": "1a5r_",
+          "len_i": 76,
+          "len_j": 103,
+          "opt_acc_e_tp": 5.0,
+          "opt_acc_total_mass": 76.0,
+          "gold": 12
+        },
+        {
+          "pair": [
+            0,
+            3
+          ],
+          "name_i": "1ubi_",
+          "name_j": "1awd_",
+          "len_i": 76,
+          "len_j": 94,
+          "opt_acc_e_tp": 7.0,
+          "opt_acc_total_mass": 72.0,
+          "gold": 12
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "name_i": "1gua_B",
+          "name_j": "1a5r_",
+          "len_i": 77,
+          "len_j": 103,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 77.0,
+          "gold": 12
+        },
+        {
+          "pair": [
+            1,
+            3
+          ],
+          "name_i": "1gua_B",
+          "name_j": "1awd_",
+          "len_i": 77,
+          "len_j": 94,
+          "opt_acc_e_tp": 5.0,
+          "opt_acc_total_mass": 75.0,
+          "gold": 12
+        },
+        {
+          "pair": [
+            2,
+            3
+          ],
+          "name_i": "1a5r_",
+          "name_j": "1awd_",
+          "len_i": 103,
+          "len_j": 94,
+          "opt_acc_e_tp": 0.0,
+          "opt_acc_total_mass": 94.0,
+          "gold": 12
+        }
+      ],
+      "msa_sp_g1": 0.18888888888888888,
+      "msa_tc_g1": 0.0,
+      "msa_f1_g1": 0.05158790584733057,
+      "msa_sp_g1_std": 0.011111111111111117,
+      "msa_tc_g1_std": 0.0,
+      "msa_f1_g1_std": 0.00323779829353441,
+      "msa_sp_g1_per_seed": [
+        0.19444444444444445,
+        0.16666666666666666,
+        0.19444444444444445,
+        0.19444444444444445,
+        0.19444444444444445
+      ],
+      "msa_tc_g1_per_seed": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "msa_f1_g1_per_seed": [
+        0.053231939163498096,
+        0.045112781954887216,
+        0.05313092979127135,
+        0.053231939163498096,
+        0.053231939163498096
+      ],
+      "msa_sp_g0": 0.19444444444444445,
+      "msa_tc_g0": 0.0,
+      "msa_f1_g0": 0.05181351406859726,
+      "msa_sp_g0_std": 0.0,
+      "msa_tc_g0_std": 0.0,
+      "msa_f1_g0_std": 4.695400342159644e-05,
+      "msa_sp_g0_per_seed": [
+        0.19444444444444445,
+        0.19444444444444445,
+        0.19444444444444445,
+        0.19444444444444445,
+        0.19444444444444445
+      ],
+      "msa_tc_g0_per_seed": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "msa_f1_g0_per_seed": [
+        0.05185185185185185,
+        0.05185185185185185,
+        0.051756007393715345,
+        0.051756007393715345,
+        0.05185185185185185
+      ],
+      "time_s": 1.1502938270568848
+    },
+    {
+      "family": "BB40038",
+      "per_pair": [
+        {
+          "pair": [
+            0,
+            1
+          ],
+          "name_i": "1d9k_A",
+          "name_j": "1a7n_L",
+          "len_i": 110,
+          "len_j": 107,
+          "opt_acc_e_tp": 55.0,
+          "opt_acc_total_mass": 105.0,
+          "gold": 57
+        },
+        {
+          "pair": [
+            0,
+            2
+          ],
+          "name_i": "1d9k_A",
+          "name_j": "1tlk_",
+          "len_i": 110,
+          "len_j": 103,
+          "opt_acc_e_tp": 51.0,
+          "opt_acc_total_mass": 93.0,
+          "gold": 57
+        },
+        {
+          "pair": [
+            0,
+            3
+          ],
+          "name_i": "1d9k_A",
+          "name_j": "2ncm_",
+          "len_i": 110,
+          "len_j": 99,
+          "opt_acc_e_tp": 38.0,
+          "opt_acc_total_mass": 94.0,
+          "gold": 57
+        },
+        {
+          "pair": [
+            1,
+            2
+          ],
+          "name_i": "1a7n_L",
+          "name_j": "1tlk_",
+          "len_i": 107,
+          "len_j": 103,
+          "opt_acc_e_tp": 45.0,
+          "opt_acc_total_mass": 94.0,
+          "gold": 57
+        },
+        {
+          "pair": [
+            1,
+            3
+          ],
+          "name_i": "1a7n_L",
+          "name_j": "2ncm_",
+          "len_i": 107,
+          "len_j": 99,
+          "opt_acc_e_tp": 45.0,
+          "opt_acc_total_mass": 94.0,
+          "gold": 57
+        },
+        {
+          "pair": [
+            2,
+            3
+          ],
+          "name_i": "1tlk_",
+          "name_j": "2ncm_",
+          "len_i": 103,
+          "len_j": 99,
+          "opt_acc_e_tp": 50.0,
+          "opt_acc_total_mass": 93.0,
+          "gold": 57
+        }
+      ],
+      "msa_sp_g1": 0.8994152046783626,
+      "msa_tc_g1": 0.8596491228070174,
+      "msa_f1_g1": 0.6892161841882511,
+      "msa_sp_g1_std": 0.005729800567913867,
+      "msa_tc_g1_std": 1.1102230246251565e-16,
+      "msa_f1_g1_std": 0.002875085302741982,
+      "msa_sp_g1_per_seed": [
+        0.8947368421052632,
+        0.9064327485380117,
+        0.8947368421052632,
+        0.8947368421052632,
+        0.9064327485380117
+      ],
+      "msa_tc_g1_per_seed": [
+        0.8596491228070176,
+        0.8596491228070176,
+        0.8596491228070176,
+        0.8596491228070176,
+        0.8596491228070176
+      ],
+      "msa_f1_g1_per_seed": [
+        0.6868686868686869,
+        0.6927374301675978,
+        0.6868686868686869,
+        0.6868686868686869,
+        0.6927374301675978
+      ],
+      "msa_sp_g0": 0.8994152046783626,
+      "msa_tc_g0": 0.8596491228070174,
+      "msa_f1_g0": 0.6892161841882511,
+      "msa_sp_g0_std": 0.005729800567913867,
+      "msa_tc_g0_std": 1.1102230246251565e-16,
+      "msa_f1_g0_std": 0.002875085302741982,
+      "msa_sp_g0_per_seed": [
+        0.8947368421052632,
+        0.9064327485380117,
+        0.8947368421052632,
+        0.8947368421052632,
+        0.9064327485380117
+      ],
+      "msa_tc_g0_per_seed": [
+        0.8596491228070176,
+        0.8596491228070176,
+        0.8596491228070176,
+        0.8596491228070176,
+        0.8596491228070176
+      ],
+      "msa_f1_g0_per_seed": [
+        0.6868686868686869,
+        0.6927374301675978,
+        0.6868686868686869,
+        0.6868686868686869,
+        0.6927374301675978
+      ],
+      "time_s": 2.0625674724578857
+    }
+  ],
+  "corpus": {
+    "opt_acc_e_tp": 2408.0,
+    "opt_acc_total_mass": 7571.0,
+    "gap1_e_tp": 0.0,
+    "gap1_total_mass": 0.0,
+    "gap1_msa_sp_sum": 7.58750449388327,
+    "gap1_msa_tc_sum": 6.749189182732473,
+    "gap0_e_tp": 0.0,
+    "gap0_total_mass": 0.0,
+    "gap0_msa_sp_sum": 7.593060049438826,
+    "gap0_msa_tc_sum": 6.749189182732473,
+    "gold_total": 2952,
+    "msa_score_count": 11,
+    "gap1_msa_f1_sum": 5.012540785968303,
+    "gap0_msa_f1_sum": 4.994887600493054
+  },
+  "corpus_aggregates": {
+    "opt_acc_F1": 0.4576641642117267,
+    "gap1_msa_SP_mean": 0.68977313580757,
+    "gap1_msa_TC_mean": 0.6135626529756794,
+    "gap0_msa_SP_mean": 0.6902781863126205,
+    "gap0_msa_TC_mean": 0.6135626529756794
+  }
+}

@@ -1,0 +1,1203 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,bm}
+\usepackage{graphicx}
+\usepackage{afterpage}
+\usepackage[dvipsnames,svgnames]{xcolor}
+\usepackage[round,numbers]{natbib}
+\usepackage{hyperref}
+\usepackage[capitalize]{cleveref}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{authblk}
+\usepackage{forest}
+\usetikzlibrary{arrows.meta}
+
+\hypersetup{colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black}
+
+% Light theorem environments; the paper is a tour, not a treatise.
+\newtheorem{prop}{Proposition}
+\theoremstyle{definition}
+\newtheorem{defn}[prop]{Definition}
+\theoremstyle{remark}
+\newtheorem*{rem}{Remark}
+
+% Graphics live in the tkf-mixdom submodule (Pfam/BAliBASE/BDI figures)
+% and in ~/tkf-dp (TKF-DP figures, once produced).
+\graphicspath{%
+  {./tkf-mixdom/python/experiments/figures/}%
+  {./figures/}%
+  {./math-paper/tkf-mixdom/python/experiments/figures/}%
+  {./math-paper/figures/}%
+}
+
+\title{Insertions, deletions, and exchangeable couplings:\\
+       a Dirichlet process over TKF92 domains and sites}
+\author{Annabel Large}
+\author{Ian Holmes}
+\affil{Department of Bioengineering, University of California, Berkeley\\
+       \texttt{\{annabel\_large, ihh\}@berkeley.edu}}
+\date{}
+
+% Macros: short-form objects we use often.
+\newcommand{\Q}{\bm{Q}}
+\newcommand{\Hh}{\bm{H}}
+\newcommand{\indel}{\ensuremath{(\lambda,\mu,r)}}
+\newcommand{\TKF}{\textsc{TKF}}
+\newcommand{\TKFDP}{\textsc{TKF--DP}}
+\newcommand{\MixDom}{\textsc{MixDom}}
+\newcommand{\BDI}{\textsc{BDI}}
+\newcommand{\Pfam}{\textsc{Pfam}}
+\newcommand{\E}{\mathbb{E}}
+
+\newcommand{\partition}{\mathcal{P}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+The TKF92 model of molecular evolution---a linear birth-death process for indels, with finite-state continuous-time Markov chain substitutions---is exchangeable in residue identity at every site: the
+generative process treats amino acids symmetrically, conditional on a single
+substitution rate matrix.
+To introduce local heterogeneity,
+evolutionary models are often equipped with site-class mixtures,
+preserving this symmetry in the sense of de Finetti: conditional on the latent class, residues are still exchangeable.
+In a four-step theoretical ladder, we show how long-range structure such as couplings between
+distant sites can also be introduced exchangeably by using a Dirichlet process to partition sites into co-evolving classes.
+Our first step is a thorough analysis of TKF92 to establish sufficient statistics, limiting behavior, and inferential tools.
+We then lift the pairwise TKF92 hidden Markov model, in the limit of
+small time, to a \emph{time-indexed gravestone-augmented pair stochastic
+context-free grammar}, and from there to its phylogenetic generalisation.
+This framing allows trajectories to be sampled exactly by Inside-Outside recursion.
+The third step places a Dirichlet process over the alive sites and asks
+co-keyed sites to evolve under a sparse Potts interaction --- an
+exchangeably-partitioned hidden direct-coupling model whose marginal
+alignment likelihood is unchanged from plain TKF92.
+The fourth rung of the ladder develops inference machinery:
+a Gibbs--Metropolis sampler that alternates alignment resamples,
+key-partition resamples, and stochastic parameter updates. We close
+several gaps along the way --- exact closed-form sufficient statistics
+for the linear birth--death--immigration component, the resolvable
+L'H\^opital limit at $\lambda{=}\mu$, and a closed-form M-step for a
+recursive generalisation of TKF92 --- and we report a 1{,}000-family
+\Pfam\ fit with $K{=}4$ site classes whose Potts atoms carry
+$\sim$0.54 nats of covariation per class-pair on top of a substantial
+single-site substitution model.
+Supplementary material, including full source code for inference, may be found at \url{https://tkfdp.net/}.
+\end{abstract}
+
+% =============================================================
+\section{Exchangeability of indel models}
+\label{sec:intro}
+% =============================================================
+
+%\paragraph{Pre-aligned sites are not enough.}
+The dominant frameworks of protein-sequence statistics are each limited in their own way. Substitution-only phylogenetic models
+(LG08, CAT, gamma-rates~\citep{LG08,lartillotcat,Yang1994a}) treat
+pre-aligned sites as independent given the tree; site--site epistasis
+is fitted away into an across-site rate-multiplier, not as a structural
+interaction. Direct-coupling analyses
+(plmDCA, mfDCA~\citep{Marks2011,Morcos2011,ekeberg2013}) recover sharp
+contact predictions from joint amino-acid frequencies, but they
+treat the alignment as data and rely on multiple-sequence alignment
+tools whose own assumptions are broken by the same
+coevolution they want to detect. Indel birth-death models
+(TKF91/TKF92~\citep{ThorneEtAl91,ThorneEtAl92,Hein2000} and the Poisson
+indel process~\citep{bouchardcote2013}) sit somewhere between, with a
+cleanly separable framework for insertions, deletions, and point substitutions but no
+mechanism for coevolution between surviving sites.
+
+\paragraph{The full potential of exchangeability is going unused.}
+TKF92 is exchangeable in residue identity: the indel process treats
+amino acids symmetrically (insertions are drawn i.i.d. from a fixed
+distribution) and the substitution generator factorises over sites.
+A site-class mixture~\citep{lartillotcat} breaks this exchangeability
+in a controlled way --- two latent classes have two different stationary
+distributions, but the dynamics within a class are still
+identity-exchangeable. The Mixture-of-Domains generalisation of
+TKF92~\citep{LargeHolmes2026} (\MixDom) breaks it again by nesting
+geometric fragments inside a top-level domain HMM. Both elaborations
+preserve a key feature: \emph{conditional on the latent class /
+domain / fragment, residues are still exchangeable}.
+
+This is our starting point for indel-aware coevolution.
+Each newly inserted residue is assigned a random ``key'': shared keys indicate coupling partners.
+The key assignment is exchangeable in the sense of de Finetti: the key labels are latent, and the distribution over them is invariant to permutation of the sites. The same is true of the site-class labels that govern the single-site substitution dynamics.
+Once those labels are sampled, the substitution rates are determined symbolically, and indels are independent of all of them.
+
+The contributions are organised as a four-rung ladder:
+\begin{enumerate}
+\item \textbf{Rung 1 (\Cref{sec:rung1}).} \emph{Exchangeably covariant
+  TKF92.} Closed-form BDI sufficient statistics and closed-form
+  Baum--Welch M-steps for TKF91, TKF92, and the singly-recursive
+  \MixDom; the L'H\^opital limit at $\lambda{=}\mu$ closes the
+  numerical singularity.
+\item \textbf{Rung 2 (\Cref{sec:rung2}).} \emph{Posterior over
+  evolutionary trajectories.} Gravestone-augmented TKF92 in its
+  infinitesimal-time limit is a continuous-time-indexed pair SCFG;
+  its Volterra fixed-point is a bivariate Riccati on alive and
+  gravestone counts, closed-form inside-outside, lifting to a
+  \emph{phylogenetic} SCFG via Felsenstein-style upwards--downwards.
+\item \textbf{Rung 3 (\Cref{sec:rung3}).} \emph{Exchangeable
+  partitioning via Dirichlet processes.} A Chinese-restaurant draw
+  partitions alive sites into co-keyed cliques; clique-mates share a
+  Potts coupling on top of a per-class GTR generator, governed by
+  three independent DPs (keys, classes, Potts atoms). The marginal
+  alignment likelihood is unchanged from rung~1.
+\item \textbf{Rung 4 (\Cref{sec:rung4}).} \emph{Inference by
+  variational EM and MCMC.} Gibbs-within-stochastic-VI:
+  inner E-step for the clique CTMC; Jain--Neal sweeps over the
+  three partition latents; recursive-traceback resample of the
+  gravestone-augmented branch history; closed-form M-step into
+  profile, Potts atom, and rate multiplier.
+\end{enumerate}
+
+% =============================================================
+\section{Methods at a glance}
+\label{sec:methods}
+% =============================================================
+
+\subsection{Rung 1: closed-form TKF foundations}
+\label{sec:rung1}
+
+\paragraph{The BDI process and its sufficient statistics.}
+TKF91 places one linear birth--death--immigration process on the
+sequence length, with insertion rate $\lambda$, deletion rate $\mu$,
+and immigration coincident with insertion. The endpoint-conditioned
+expected sufficient statistics --- the birth count $B$, the death
+count $D$, and the time-integrated alive count $S$ --- have a
+closed form via the Fisher score identity applied to the
+Kendall--Karlin--McGregor transition density~\citep{Kendall1948}.
+The sufficient statistics implicitly account for the
+gravestone lineages and other transient
+trajectory segments unobserved at the endpoints
+(\Cref{fig:tkf-trajectory}).
+Writing $p(j \mid i; t) = \E[\mathbf{1}\{N(t)=j\} \mid N(0)=i]$ for
+the BDI transition density, differentiating $\log p$ with respect to
+$\lambda$ and $\mu$ gives two score identities involving $\E[B]$,
+$\E[D]$, and $\E[S]$; the Karlin--McGregor count-balance
+$j - i = \E[B] - \E[D]$ closes the system. Solving:
+\begin{equation}
+\label{eq:bdi-suffstat}
+\begin{aligned}
+\E\!\left[S \;\middle|\; i, j, t\right]
+  &\;=\; \frac{(j - i) \;+\; \mu \, \partial_\mu \log p(j \mid i; t)
+              \;-\; \lambda \, \partial_\lambda \log p(j \mid i; t)
+              \;-\; \lambda t}{\lambda - \mu}, \\[2pt]
+\E\!\left[B \;\middle|\; i, j, t\right]
+  &\;=\; \lambda \, \partial_\lambda \log p(j \mid i; t)
+        + \lambda \, \E[S \mid i, j, t]
+        + \lambda t, \\[2pt]
+\E\!\left[D \;\middle|\; i, j, t\right]
+  &\;=\; \mu \, \partial_\mu \log p(j \mid i; t)
+        + \mu \, \E[S \mid i, j, t].
+\end{aligned}
+\end{equation}
+The $\E[S]$ formula has a $0/0$ singularity at $\lambda=\mu$: the
+$(\lambda - \mu)$ denominator vanishes, and the numerator vanishes too
+as an automatic consequence of the same count-balance identity that
+closed the system. Earlier work~\citep{CrawfordSuchard2012,Holmes2005Envelope}
+patched the singularity with an $\varepsilon$-clamp; it is in fact a
+resolvable L'H\^opital limit recovered exactly by differentiating
+numerator and denominator a second time in $\lambda - \mu$, matching
+Gillespie simulations to Monte-Carlo precision at $10^7$ trajectories
+per regime (\Cref{fig:bdi-and-tkf-validation}). The same identity applied to the
+TKF92 fragment-level process supplies the closed-form sufficient
+statistics for the indel side of TKF92 and of
+\MixDom.
+
+\paragraph{Closed-form Baum--Welch for TKF, including recursive variants.}
+With sufficient statistics in hand, the M-step for TKF91 and TKF92
+is closed form: an exact quadratic equation in
+$(\lambda, \mu, r)$ from the per-cherry counts, plus a standard
+GTR update on the substitution side from bridge expectations~\citep{HolmesRubin2002}.
+Recursive variants---such as the previously-described singly-recursive \MixDom\ model of proteins \cite{LargeHolmes2026} and
+fully-recursive TKF Structure Tree models of RNA structure \cite{Holmes2004}, or other models of RNA, protein, and genome evolution described in the appendix---present a separate subtlety: 
+their potentially-empty nested substructures require null state elimination by Schur complement.
+Naively, the M-step then needs second derivatives through the eliminated null blocks. We
+show how to restore eliminated counts exactly by a systematic backward
+elimination chain:
+the Forward--Backward (Inside--Outside) counts on the collapsed pair HMM (or pair SCFG) are pushed
+backward to per-null counts on the
+exploded model, and a single sum-by-parameter-group recovers
+unbiased \BDI\ sufficient statistics for every parameter.
+The
+algebra is verified against autodiff at $10^{-6}$ relative tolerance for \MixDom; the
+practical consequence is that rate-space Baum--Welch is exact at every
+level (top-level domain, per-domain fragment, per-fragment class,
+weights).
+
+\paragraph{Single-site substitution.}
+The substitution generator is the F81 instance of GTR,
+$Q^{(c)}_{xy} = \eta_s S_{xy} \pi^{(c)}(y)$, with a shared
+exchangeability matrix $S \in \mathbb{R}^{20 \times 20}$, a
+per-class stationary distribution $\pi^{(c)} \in \Delta^{19}$, and
+a per-site gamma rate multiplier $\eta_s$. The F81 form is one of
+two natural reversible instances; we adopt it (over the symmetric
+Metropolis form) because it admits strict Dirichlet--multinomial
+conjugacy on $\pi^{(c)}$ via a secret-destination augmentation of the embedded random walk
+(\Cref{sec:rung4}). Class assignments are drawn from a Dirichlet
+process with concentration $\alpha_c$; the limit reproduces the CAT
+profile mixture~\citep{lartillotcat} and, augmented with the
+$\eta_s$ multiplier, the Yang gamma-rates model~\citep{Yang1994a}.
+
+\subsection{Rung 2: the time-indexed gravestone-augmented pair SCFG}
+\label{sec:rung2}
+
+% TODO(YAM): If we get extra page budget, expand this paragraph with
+% the grammar productions; currently they live in the long supplement
+% (~/tkf-dp/main.tex Sec.\ \texttt{sec:gravestone-scfg}).
+
+\paragraph{From pair HMM to time-indexed pair SCFG.}
+TKF91, viewed as a Markov process on sequence length and observed
+through a pair HMM at finite time $t$, has a continuous-time
+embedding that is not itself a pair HMM but a stochastic
+context-free grammar with productions indexed by time. Let
+$L(t)$ denote one link of age $t$; under TKF91 dynamics, $L(t)$ has
+lifetime $\tau \sim \mathrm{Exp}(\mu)$ and spawns child links at
+rate $\lambda$ during its lifetime. The branching structure is a
+continuous-time Galton--Watson process expressible as
+\begin{align*}
+L(t) &\;\to\; A \cdot D(t,t)
+        & &\text{weight } e^{-\mu t}, \\
+L(t) &\;\to\; G_\tau \cdot D(t,\tau)
+        & &\text{density } \mu e^{-\mu \tau}\,d\tau,\quad \tau \in (0, t), \\
+D(t, T) &\;\to\; L(t-u) \cdot D(t, T)
+        & &\text{density } \lambda\, du,\quad u \in (0, T), \\
+D(t, T) &\;\to\; \varepsilon
+        & &\text{weight } e^{-\lambda T}.
+\end{align*}
+The terminals $A$ and $G_\tau$ are an \emph{alive} residue and a
+\emph{gravestone} residue that died on the branch at relative time
+$\tau$; $D(t, T)$ generates a list of child links born during a
+window of size $T$ inside an observation interval of size $t$. The
+TKF92 expansion is mechanical: replace each single-residue terminal
+with a geometric fragment of shared death time, leaving the
+fragment-level branching grammar unchanged. The pair version adds
+an ancestor strand on the left of each $A$/$G_\tau$ terminal; insertions
+have no ancestor counterpart. The grammar parse tree is the
+continuous-time embedding of the TKF trajectory
+(\Cref{fig:tkf-trajectory}): each $L(t)$ non-terminal expansion
+corresponds to one branch of the Galton--Watson process, and the
+$A$/$G_\tau$ terminals are the alive and gravestone residues whose
+lifetimes the parse tree records.
+
+\paragraph{Why the augmentation matters: transient lineages.}
+Under any model with site--site coupling, an alignment-invisible
+fragment --- born and deleted on the same branch --- still changes
+the substitution dynamics of every site it shares a coupling
+partner with during its lifetime. The naive scheme of sampling only
+the alignment-visible indel events misses these transient lineages.
+The augmentation places them explicitly in the grammar's parse
+trees, as $G_\tau$ residues with finite lifetimes, so that the
+substitution likelihood can sum over them. The instantaneous alive
+count $N_a(t)$ is bounded pathwise by the visible-at-$T$ count plus
+the gravestone count, so the indel CTMC bridge has a finite state
+space and admits a closed-form recursive sampler.
+
+\paragraph{The bivariate Riccati.}
+Let $f_t(z, w) = \E[z^{N_a(t)} w^{N_g(t)}]$ be the joint generating
+function for alive count $N_a$ and gravestone count $N_g$.
+The Volterra fixed point
+\begin{equation}
+f_t(z, w)
+  \;=\; z\, e^{-\mu t}\, \exp\!\Bigl(\lambda \!\int_0^t (f_s(z,w) - 1)\, ds\Bigr)
+  \;+\; w \int_0^t \mu e^{-\mu \tau}\, \exp\!\Bigl(\lambda \!\int_{t-\tau}^{t} (f_s(z, w) - 1)\, ds\Bigr)\, d\tau,
+\end{equation}
+is equivalent to the forward equation
+$\partial_t f_t = [\lambda z^2 - (\lambda+\mu) z + \mu w]\, \partial_z f_t$
+with $f_0 = z$, a Riccati in $z$ whose flow closes algebraically.
+The Volterra fixed-point above is the Laplace transform of the Inside
+algorithm of stochastic context-free grammars
+\citep{KnudsenHein1999,Rivas2008,HolmesRubin2002psb}: the SCFG production
+weights of the time-indexed grammar enter as their integrated kernels
+(survival $e^{-\mu t}$ and rate-density $\mu e^{-\mu \tau}\,d\tau$), and
+inside-outside in the $(z,w)$ generating-function domain is the
+fixed-point iteration of the Volterra equation.
+Defining $\Delta(w) = \sqrt{(\lambda-\mu)^2 + 4 \lambda \mu (1 - w)}$
+and $z_\pm(w) = ((\lambda+\mu) \pm \Delta(w)) / (2 \lambda)$, the
+flow $(z(t) - z_+) / (z(t) - z_-) = (z(0) - z_+) / (z(0) - z_-) \cdot e^{-\Delta(w) t}$
+inverts to give pointwise transition probabilities for $(N_a, N_g)$
+at any branch length. Setting $w = 1$ recovers the standard linear
+birth--death PGF for $N_a$ alone.
+
+\paragraph{Phylogenetic lift.}
+The per-branch closed-form transition kernel from the Riccati
+composes across branches: the marginal at each internal node,
+conditional on the rest of the tree, is a closed-form pointwise
+distribution computable in $O(1)$ given the per-branch kernel
+evaluations. Felsenstein-style upwards--downwards then gives a
+tree-level closed-form sampler for the gravestone-augmented
+history --- a \emph{phylogenetic} SCFG of the same time-indexed
+form. Earlier work on pair SCFGs~\citep{Sankoff85,KnudsenHein1999,HolmesRubin2002psb,Rivas2008}
+operates at fixed time; the present construction is the
+infinitesimal limit, and it lifts to trees without modification.
+
+\subsection{Rung 3: Dirichlet-process partitioning and Potts couplings}
+\label{sec:rung3}
+
+\paragraph{The TKF-DP model.}
+Fix TKF92 indel parameters \indel, a key-class concentration
+$\alpha_z > 0$, a site-class concentration $\alpha_c > 0$, a
+Potts-atom concentration $\alpha_H > 0$, and base measures
+$G_0$ on $\pi^{(c)}$ (Dirichlet) and $G_0^H$ on entries of each
+Potts atom $H_h \in \mathbb{R}^{20 \times 20}$ (Gaussian).
+\begin{defn}[TKF-DP]
+\label{defn:tkfdp}
+Sample stick-breaking weights for three independent Dirichlet
+processes (one over key classes, one over site classes, one over
+Potts atoms). Run TKF92 dynamics with parameters \indel. At each
+fragment-birth event, draw $(z_s, c_s, \eta_s)$ from
+$(\mathrm{Cat}(\pi^z), \mathrm{Cat}(\pi^c), \mathrm{Gamma}(a_\eta, b_\eta))$
+for each new residue; the labels are fixed for the residue's
+lifetime. At each first co-occurrence of an unordered class-pair
+$\{c, c'\}$, assign it a Potts-atom index $h_{cc'} \sim \mathrm{Cat}(\pi^H)$,
+materialising an atom $H_{h_{cc'}}$ from $G_0^H$ if new. The amino-acid
+trajectory on each key class $C$ is the single-site reversible
+CTMC with rate
+\[
+Q^s(x \to x';\,x_{C\setminus s})
+  \;=\; \eta_s \, S_{xx'} \, \pi^{(c_s)}(x') \,
+        \exp\!\Bigl(-\tfrac{1}{2} \!\!\sum_{s' \in C \setminus s}\!\! [\,H_{c_s c_{s'}}(x', x_{s'}) - H_{c_s c_{s'}}(x, x_{s'})\,]\Bigr),
+\]
+which is reversible with respect to the joint Potts stationary
+\[
+\pi_C(x_C) \propto \prod_{s \in C} \pi^{(c_s)}(x_s) \cdot \exp(-\sum_{\{s, s'\} \subset C}\! H_{c_s c_{s'}}(x_s, x_{s'})).
+\]
+\end{defn}
+
+\paragraph{Alignment--substitution factorisation is preserved.}
+The key DP draws are i.i.d. across sites at birth, independent of the
+alignment path and of the substitution history. The joint
+distribution therefore factorises as
+\begin{equation}
+\label{eq:factorisation}
+P(\mathrm{align}, \partition, \{z_s\}, \mathrm{subst})
+  \;=\; P_{\TKF}(\mathrm{align}) \cdot P(\partition \mid L_A) \cdot \prod_s P(z_s \mid \partition) \cdot P(\mathrm{subst} \mid \mathrm{align}, \{z_s\}),
+\end{equation}
+where $L_A := |\mathrm{Alive}(\mathrm{align})|$ is the number of
+alive sites the alignment exposes (for the pairwise object of
+\Cref{eq:infinite-phmm}: the Match cells); the partition prior
+depends only on this count, not on alignment geometry. In particular: the
+marginal alignment likelihood is exactly TKF92's at every $\alpha_z$;
+the $\alpha_z = \infty$ all-singletons limit recovers TKF92 + per-site
+GTR pointwise. The coupling enters only through the substitution
+factor.
+
+\paragraph{Partition statistics and identifiability.}
+Marginalising $\partition^z$, the partition on any finite set of $L$ sites
+is the Ewens partition with parameter $\alpha_z$, equivalent to a
+Chinese restaurant process draw. The expected total number of classes among $L$ sites is
+$O(\alpha_z \log L)$, with $k$-cliques suppressed by
+$1/\alpha_z^{k-1}$ relative to the all-singleton baseline; the
+prior is naturally sparse. The three DPs play distinct roles. $\alpha_c$
+controls the number of materialised site classes; $\alpha_z$ controls
+the per-MSA partition into Potts cliques; and $\alpha_H$ controls
+identifiability of the Potts side. Without an atom DP, the free
+parameter count is $O(K_c^2 \cdot A^2)$ for $K_c$ site classes and
+$A$-state alphabet; with it, the count is $O(K_H \cdot A^2 + K_c^2)$
+class-pair indices, where $K_H$ is data-driven and typically much
+smaller than $K_c^2$. Distinct class-pairs $\{c, c'\}, \{d, d'\}$
+may share an atom index $h_{cc'} = h_{dd'}$; $K_H$ counts distinct
+atoms, not distinct class-pairs, and the atom DP's reinforcement
+is what drives this sharing.
+We use $K_H \le K_c(K_c+1)/2$ truncated
+stick-breaking by default; at $K_H = K_c(K_c+1)/2$ the truncation
+is tight (every class-pair could in principle have its own atom).
+Dirichlet processes have previously been explored to partition MSA columns into site classes and rows into functional classes~\cite{huelsenbeck2006,huelsenbeck2007,brown2008,nguyen2013,rodrigue2021}.
+The CRP draws on key classes $\{z_s\}$ are the
+``lottery tickets'' of \Cref{fig:tkf-trajectory}: each residue
+draws a key at birth, residues sharing a key are coupled, and the
+Ewens prior on the resulting partition is what selects which
+columns enter a Potts clique.
+
+\paragraph{Connection to direct-coupling analysis.}
+Direct-coupling analyses~\citep{Marks2011,Morcos2011,ekeberg2013}
+fit a Potts model on the joint amino-acid frequencies of aligned
+columns of a single protein family. The TKF-DP is the indel-aware,
+phylogenetically-explicit, exchangeably-clustered generalisation:
+it conditions on a generative model of how aligned columns came to
+exist (TKF92 indels through time on a tree), it accumulates
+coevolutionary evidence across a corpus through a shared Potts-atom
+DP rather than per-family, and the columns it couples are drawn
+from an Ewens-distributed cluster prior rather than fitted as
+$O(L^2)$ explicit dyadic edges. The Wilburn--Eddy hidden Potts
+model~\citep{wilburneddy2020}, designed for remote homology search,
+is the closest single antecedent: it pairs a profile-HMM-style
+indel architecture with a Potts model over residue identities and
+makes the same architectural commitment that coevolution and
+indels must be scored jointly rather than as post-hoc rescoring.
+
+\subsection{Rung 4: inference}
+\label{sec:rung4}
+
+The inference loop combines four ingredients in a stochastic
+variational EM scheme. We give each in one paragraph; full
+derivations are in the supplement.
+
+\paragraph{Inner variational E-step.}
+For each branch and each key DP class, the joint
+substitution dynamics on $\mathcal{A}^{|C|}$ has no usable
+eigendecomposition for $|C|>1$, and direct matrix exponentiation is infeasible for $|C|>2$.
+We approximate by the path-measure mean-field
+of Cohn et al.~\citep{cohn2010}, restricted to a constant per-site
+rate matrix $\hat Q^s_b$ on each composition-constant segment.
+The geometric-mean fixed point
+$\log \hat Q^{s,*}_b(x \to x') = \log\eta_s + \log S_{xx'} + \log \pi^{(c_s)}(x') -
+\tfrac12 \sum_{s' \in C \setminus s} \E_{\bar q^{s'}_b}[H_{c_s c_{s'}}(x', x_{s'}) - H_{c_s c_{s'}}(x, x_{s'})]$
+admits a closed-form ELBO via pairwise bridge expectations
+($\mathrm{Br}(\alpha, \beta, t) = (e^{\alpha t} - e^{\beta t}) /
+(\alpha - \beta)$ for $\alpha \ne \beta$, $= t e^{\alpha t}$ otherwise).
+The constant-rate scheme is the $N=1$ end of an adaptive refinement
+that converges to Cohn's full inhomogeneous family as $N \to \infty$
+sub-segments; the gravestone augmentation of rung 2 supplies a
+forced segmentation at every composition-change event.
+
+\paragraph{MCMC over the discrete and augmentation latents.}
+Three combinatorial latents alternate. Augmented branch histories
+can be resampled by recursive midpoint traceback on the time-indexed
+pair SCFG of rung 2, with closed-form midpoint marginals from the
+bivariate Riccati and Felsenstein-style upwards--downwards across
+the tree.
+Key DP labels $z_s$ flip by Chinese-restaurant Gibbs with
+class-level ELBO ratios from the previous variational step; site
+classes $c_s$ flip by analogous CRP-Gibbs with single-site
+likelihoods; Potts-atom indices $h_{cc'}$ resample by truncated
+stick-breaking sweeps that share atoms across class-pairs.
+Jain--Neal split--merge proposals~\citep{jainneal2004} on all three
+partitions provide global mixing.
+Pairwise alignment to the Infinite Pair HMM~\citep{bealghahramani2002}
+uses a per-MSA block-resample on site
+partitions, with a setup-phase $O(L^4)$ precompute of the
+two-anchor partial-Forward tensor and per-sweep cost $O(L)$
+(amortised: each sweep does $O(1)$ inter-edge-anchor segment
+resamples, each an $O(L_\text{seg})$ stochastic traceback through
+the cached partial-Forward).
+
+\paragraph{Closed-form base-measure integrals.}
+The new-class predictives in the three CRPs require integrals
+against the base measures. Three structural conjugacies make
+them closed form: a \emph{secret-destination augmentation} on
+$\pi^{(c)}$ (the F81 rate factors as an $S$-driven Poisson
+proposal clock with a $\pi^{(c)}$-driven Bernoulli filter, and
+silent-failure votes---including transitions back to source as an unobserved destination---complete the multinomial structure) gives
+Dirichlet--multinomial conjugacy on the per-class profile; a
+Gamma--Poisson conjugacy on $\eta_s$ gives closed-form
+Negative-Binomial site marginals; and a Gaussian-Laplace
+approximation around the path-DCA MAP gives closed-form Gaussian
+posteriors on each Potts atom, with a small multi-seed Laplace
+mixture for atoms with multimodal basins.
+
+\paragraph{Pairwise posteriors for decision-theoretic multiple alignment.}
+For downstream consensus-MSA assembly via
+sequence annealing~\citep{BradleyEtAl2009}, we expose a per-Match-cell
+posterior $Q'_{ij}$ derived from the joint-marginal alignment-and-partition
+target of \Cref{eq:infinite-phmm}: an alignment $A$ together with a
+size-$\{1, 2\}$ partition $E$ of its Match cells contributes a product
+of per-block factors --- $P_{\mathrm{singlet}}(x_i, y_j; t)$ at
+unpartnered Match cells and $P_{\mathrm{doublet}}((x_i, x_k), (y_j, y_l); t)$
+at coupled doublet endpoints --- with class assignments and rate
+multipliers integrated analytically rather than re-marginalized at
+every column. The supplement details the per-block primitives, the
+augmented-Pair-HMM bounded-edge family
+($O(L^2 A^2)$ for 1-edge, $O(L^2 A^4)$ for 2-edge), and the
+infinite-Pair-HMM MCMC sampler that targets the unbounded-edge limit.
+
+\paragraph{Counts-tensor training corpus.}
+Per-family int8 (cherry $\times$ column $\times$ AA-pair $\times$
+branch-bin) count tensors decouple inference from MSA parsing,
+letting one SVI outer iteration scale to $10^3$--$10^4$ \Pfam\
+families.
+
+% =============================================================
+\section{Results}
+\label{sec:results}
+% =============================================================
+
+\subsection{Closed-form sufficient statistics match Gillespie simulation}
+\label{sec:results-bdi}
+
+The BDI sufficient-statistic formulae of \Cref{eq:bdi-suffstat} agree
+with event-driven Gillespie simulation to within Monte-Carlo
+precision at $n_{\mathrm{sim}} = 10^7$ trajectories per
+$(\lambda, \mu, t, i_0)$ regime. \Cref{fig:bdi-and-tkf-validation}
+panels (a)--(c) show closed-form score-identity estimates against
+Gillespie sample means for the birth count $B$, death count $D$,
+and time-integrated alive count $S$ across a grid spanning
+$\kappa = \lambda / \mu \in \{<1, 1, >1\}$. The
+L'H\^opital limit at $\lambda = \mu$ has no $\varepsilon$-clamp
+degeneracy at the diagonal and matches Gillespie to Monte-Carlo
+precision. Lifting to the TKF91/TKF92 process and to the full
+forward--backward E-step, panel (d) shows the relative Gillespie
+residual scaling as the canonical $1/\sqrt{n}$ across three
+representative regimes, with 800 replicate seeds per
+$n_{\mathrm{sim}}$ and no detectable bias offset --- confirming both
+unbiasedness of the score-identity expressions and statistical
+correctness of the Gillespie simulator.
+
+\subsection{\Pfam\ training signals: covariation and rate heterogeneity}
+\label{sec:results-tkfdp}
+
+\paragraph{Covariation signal.}
+A $K_c{=}4$, $K_H{=}10$ TKF-DP fit to 1{,}000 \Pfam\
+families~\citep{Pfam2021} (indel rates pre-trained by Maraschino
+cherry-distillation~\citep{Prillo2022CherryML} and fixed; 500 EM
+warmup iterations on the Dirichlet--multinomial class assignment,
+then 55 stochastic VI outer iterations with the full coupled loop;
+MSAs as the only supervision, no PDB) recovers a covariation signal
+visible directly in the stationary class-pair log-odds heatmap
+(\Cref{fig:k4-coupling-score}): a +2.51-bit Cys--Cys disulfide
+signature on the diagonal, a +1.66-bit off-diagonal Met--Tyr
+attraction consistent with the methionine-aromatic motif, and a
+band of Chou--Fasman-consistent proline aversions on the negative
+side.
+
+\paragraph{Indel and compositional heterogeneity.}
+Separately, a three-domain single-fragment MixDom model
+(\texttt{d3f1}) fit to the same corpus via SVI--BW with the exact
+closed-form chain-restoration M-step (\Cref{sec:rung1}; a
+Maraschino warm-start was tried but did not improve held-out LL)
+separates its three domains cleanly: one
+high-indel ($\lambda{\approx}0.11$, $\mu{\approx}0.17$, weight
+0.32, mean fragment length 2.8) with the classic disordered / loop
+signature (enriched in S, P; depleted in W, C, M, H, Y; mean
+Kyte--Doolittle $-0.82$), and two low-indel domains
+($\sim$20$\times$ smaller rates, mean KD $+0.07$ and $-0.22$;
+enriched in L, V, I --- the buried-core hydrophobic residues
+absent from the high-indel domain's enriched set). Indel
+rate tracks hydrophilicity in the direction biological intuition
+predicts --- mobile loops drift in length faster than buried cores
+--- though most of the contrast is carried by the high-indel domain.
+
+\subsection{Pairwise alignment accuracy on structural benchmarks}
+\label{sec:results-aln}
+
+\paragraph{Evaluation by expected pair-confusion.}
+We score pairwise alignment accuracy through the soft confusion
+matrix on the residue-pair cell grid: for each pair of sequences in
+a reference MSA guided by experimentally-determined structures, we read off the gold match set
+$T = \{(r_i, r_j)\}$ from the curated alignment and compute, against
+the model's $L_i \times L_j$ match-posterior matrix $P$, the
+sufficient statistics
+\begin{equation}
+e_{\mathrm{TP}} \;=\; \!\!\!\sum_{(r_i, r_j) \in T}\!\!\! P[r_i, r_j],
+\qquad
+\mathrm{total\;mass} \;=\; \!\!\sum_{r_i, r_j}\!\! P[r_i, r_j]
+  \;=\; e_{\mathrm{TP}} + e_{\mathrm{FP}},
+\qquad
+|T| \;=\; e_{\mathrm{TP}} + e_{\mathrm{FN}}.
+\end{equation}
+These four numbers are additive across pairs and across families and
+suffice to compute soft precision, recall, and expected pair F1.
+%(implemented in
+% \texttt{tkfmixdom/util/expected\_pair\_f1.py}).
+The measurement is
+exact given the posterior; no Viterbi decoding is required, and no
+MSA reconstruction is performed.
+% This is the appropriate
+%``information-theoretic'' summary of a pair-HMM posterior: it
+%respects the full posterior, not a single thresholded MAP path.
+
+\paragraph{BAliBase results.}
+\Cref{tab:headline-aln} summarises pairwise expected-$F_1$ results
+on the 22-family BAliBase BAli3pdbm $L\,{<}\,150$ subset (187
+sequence pairs) for the canonical pipeline:
+TKF92 baseline (single-component, corpus-fitted indel
+rates), TKF92-$K{=}20$ indel mixture, CherryML-$C{=}20$, MixDom-d3f1,
+external aligners MAFFT~\citep{Katoh2013} and MUSCLE~\citep{Edgar2004}, and the infinite-Pair-HMM (TKF-DP
+$K{=}4$ Potts-coupled) MCMC sampler.  The MixDom-d3f1 model
+($D = 3$ domains, $F = 1$ fragment per domain) is amongst the smallest
+\MixDom\ models that meaningfully improve over plain TKF92 on this
+benchmark; adding fragments or classes beyond this scale gives
+diminishing returns.  The
+infinite-PHMM-$K{=}4$ sampler uses the released checkpoint trained on
+$\sim$1{,}000 \Pfam\ families with EM warmup
+(\Cref{sec:results-tkfdp}); its column entries are the
+running-mean cell posterior $Q'$ from the MCMC sampler (the
+22-family $L\,{<}\,150$ subset is the practical eligibility ceiling
+for the $O(L^4)$ partial-Forward precompute on an 11~GiB GPU; see
+\Cref{sec:results-tkfdp} for the calibration).
+The TKF-DP coevolutionary coupling is weak in the pairwise case, and appears to sharpen
+alignment accuracy only slightly, with gains lost by the sequence-annealing algorithm for MSA assembly
+(which does not, at present, share coupling signal across MSA columns, unlike the composite-likelihood method
+discussed in \Cref{sec:results-aln-infinite-phmm} and Figure~\ref{fig:pf00053-msa-triangle}).
+
+\begin{table}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+% Column structure:
+%   Method (one per method)
+%   E_pairs(Q')        : F1 + e_tp from the soft posterior
+%   E_pairs(opt-acc)   : F1 + e_tp from the Holmes-Durbin optimal-accuracy DP
+%   E_pairs in MSA     : F1 from the MSA cell indicator
+%   MSA[SP]            : avg per-family pairwise SP from the MSA (BAliBASE)
+%   MSA[TC]            : avg per-family pairwise TC from the MSA (BAliBASE)
+\begin{tabular}{lcccccccc}
+\toprule
+& \multicolumn{2}{c}{$E_{\mathrm{pairs}}(Q')$} & \multicolumn{2}{c}{$E_{\mathrm{pairs}}$(opt-acc)} & $E_{\mathrm{pairs}}$ & \multicolumn{2}{c}{MSA score} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){7-8}
+\textbf{Method} & $F_1$ & $e_{\mathrm{TP}}$ & $F_1$ & $e_{\mathrm{TP}}$ & in MSA $F_1$ & SP & TC \\
+\midrule
+% --- soft methods ---
+TKF92                          & 0.450 &  4839 & 0.475 &  5202 & 0.514 & 0.724 & 0.631 \\
+MixDom-d3f1                    & 0.462 &  4946 & 0.489 &  5372 & 0.513 & 0.726 & 0.638 \\
+TKF92-$K{=}20$                 & 0.458 &  4921 & 0.486 &  5324 & 0.515 & 0.732 & 0.637 \\
+CherryML-$C{=}20$              & 0.418 &  4582 & 0.457 &  5077 & 0.482 & 0.703 & 0.602 \\
+inf-PHMM-$K{=}4$ (RE)\textsuperscript{$\ast$}
+ & 0.450 & 4908 & 0.475 & 5232 & 0.509 & 0.705 & 0.609 \\
+\midrule
+% --- hard methods (MAFFT, MUSCLE) ---
+MAFFT (FFT-NS-2)                           &   --- &   --- &   --- &   --- & 0.509 & 0.691 & 0.558 \\
+MUSCLE (default)                           &   --- &   --- &   --- &   --- & 0.512 & 0.760 & 0.662 \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Alignment accuracy on the
+22-family BAliBase BAli3pdbm L\,$<$\,150 subset (187 pairs).}
+%
+The L\,$<$\,150 ceiling reflects the practical memory headroom for the
+infinite-Pair-HMM $O(L^4)$ sampler on an 11~GiB GPU (max-seq-len
+$<$~150; see~\Cref{sec:results-tkfdp}).
+%All numbers are pooled
+%sufficient statistics from
+%\texttt{tkf-mixdom/python/experiments/expected\_balibase/expected\_balibase\_*\_l150.json}
+%and \texttt{math-paper/results/infinite\_phmm\_balibase\_k4.json}; the
+%underlying soft suff stats $\{e_{\mathrm{TP}}, \mathrm{total\,mass},
+%|T|, n_{\mathrm{cells}}\}$ are additive across pairs.
+$E_{\mathrm{pairs}}(Q')$
+columns are the raw posterior pool; $E_{\mathrm{pairs}}$(opt-acc) is
+decision-theoretic optimal-accuracy DP applied to the same posterior~\citep{Holmes98};
+$E_{\mathrm{pairs}}$ in MSA is the cell-indicator pool from the
+downstream FSA-merged MSA.
+\textsuperscript{$\ast$}~The infinite-PHMM-$K{=}4$ row uses the
+released \texttt{K4-emwarm-top1000-2026-05-09} TKF-DP checkpoint
+($K_c{=}4$ classes, $K_H{=}10$ Potts atoms), with $\alpha_z{=}100$
+and corpus-fitted indel rates
+($\lambda{=}0.04581$, $\mu{=}0.04680$, $r{=}0.6835$),
+under replica-exchange (6-rung $\alpha_z$ ladder
+$\{100, 178, 316, 562, 10^3, 5{\times}10^3\}$, swap every 10 sweeps;
+8000 sweeps + 2000 burn-in per rung; 2 RE replicates per pair).
+The infinite-PHMM sampler $Q'$ is fed into the same FSA
+pipeline as the other soft methods.
+%
+\label{tab:headline-aln}}
+\end{table}
+
+\begin{table}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccccccc}
+\toprule
+& \multicolumn{2}{c}{$E_{\mathrm{pairs}}(Q')$} & \multicolumn{2}{c}{$E_{\mathrm{pairs}}$(opt-acc)} & $E_{\mathrm{pairs}}$ & \multicolumn{2}{c}{MSA score} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){7-8}
+\textbf{Method} & $F_1$ & $e_{\mathrm{TP}}$ & $F_1$ & $e_{\mathrm{TP}}$ & in MSA $F_1$ & SP & TC \\
+\midrule
+% --- soft methods ---
+TKF92                          & 0.289 & 77{,}284 & 0.309 & 84{,}913 & 0.377 & 0.776 & 0.622 \\
+MixDom-d3f1                    & 0.316 & 81{,}324 & 0.330 & 89{,}284 & 0.384 & 0.807 & 0.662 \\
+TKF92-$K{=}20$\textsuperscript{$\dagger$}      & 0.306 & 71{,}363 & 0.327 & 78{,}249 & 0.382 & 0.780 & 0.628 \\
+CherryML-$C{=}20$\textsuperscript{$\dagger$}    & 0.253 & 60{,}717 & 0.291 & 71{,}175 & 0.347 & 0.701 & 0.514 \\
+\midrule
+% --- hard methods (MAFFT, MUSCLE) ---
+MAFFT (FFT-NS-2)               &   --- &   --- &   --- &   --- & 0.365 & 0.797 & 0.653 \\
+MUSCLE (default)               &   --- &   --- &   --- &   --- & 0.373 & 0.841 & 0.715 \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Alignment accuracy on the full BAliBase bali3pdbm
+corpus (120 families, all sequence lengths).} Same methods and
+column definitions as \Cref{tab:headline-aln} (the $L\,{<}\,150$
+subset), except the infinite-Pair-HMM-$K{=}4$ row is omitted (the
+$O(L^4)$ MCMC sampler does not currently scale to
+$L \geq 150$ on a single 11~GiB GPU).
+MixDom-d3f1 remains the strongest soft method
+($F_1{=}0.316$ on $E_{\mathrm{pairs}}(Q')$, $0.384$ in MSA);
+MAFFT / MUSCLE remain the strongest hard methods.
+\textsuperscript{$\dagger$}~TKF92-$K{=}20$ and CherryML-$C{=}20$ cover
+117/120 families; BB11018 ($n{=}12$), BB50002 ($n{=}9$) and BB50006
+($n{=}10$) exceeded the 11~GiB GPU memory budget at the FSA stage and
+are excluded.
+\label{tab:headline-aln-full}}
+\end{table}
+
+\subsection{The infinite Pair HMM as the natural fixed point}
+\label{sec:results-aln-infinite-phmm}
+
+The methods of \Cref{tab:headline-aln} together span the
+$|E| = 0$ truncation (the soft-DP rows, which factor over Match
+cells and ignore Potts coupling between sites) and the $|E| \to
+\infty$ limit (the infinite-Pair-HMM sampler row, which couples
+sites via the size-$\{1,2\}$ Ewens prior at the trained
+$\alpha_z$); they are progressively faithful approximations
+to a single underlying object: the alignment-and-partition posterior
+\begin{equation}
+\label{eq:infinite-phmm}
+\pi(A, \partition_{\!M} \mid X, Y)
+  \;\propto\;
+  \pi_{\TKF92}(A \mid X, Y) \cdot
+  \pi_{\mathrm{CRP}}(\partition_{\!M} \mid \alpha_z, |\mathrm{Match}(A)|) \cdot
+  \prod_{b \in \partition_{\!M}} P_{\mathrm{block}}(b \mid t, H),
+\end{equation}
+where $\partition_{\!M}$ partitions the Match cells into singletons (block
+of size 1, contributing the standard per-site CTMC factor) and
+pairs (block of size 2, contributing the joint Potts CTMC factor),
+with the size-$\{1,2\}$ truncation of the Ewens prior. The
+factorisation makes the alignment, partition, and substitution
+factors independent given each other; the block-resample MCMC
+kernel of \Cref{sec:rung4} samples from \Cref{eq:infinite-phmm}
+exactly. \Cref{eq:infinite-phmm} is itself the principled
+single-branch marginal of the infinite gravestone-augmented
+phylogenetic SCFG (rung 2 of the ladder): in the full multi-branch
+object, the same CRP rule governs edge spawn at every
+site of every fragment --- alive or gravestone --- at every
+internal node, with the substitution likelihood depending on the
+full augmented history rather than only the alignment-visible
+fragments (\Cref{fig:tkf-trajectory}).
+
+\paragraph{Worked example: divergent disulfide-rich pair from a held-out family
+(\Cref{fig:lama1-holmes-tile,fig:pf00053-msa-triangle}).}
+We ran the canonical infinite Pair HMM sampler
+on a single sequence pair from human \textbf{LAMA1}
+(laminin subunit $\alpha$-1, UniProt \texttt{P25391}), a member
+of the \Pfam\ Laminin EGF-like family \texttt{PF00053}
+(\emph{held out from training}): two EGF-like repeats of LAMA1,
+residues 1452--1506 and 1090--1147, with
+$L_x{=}55, L_y{=}58, \tau{=}2.15$ and only
+21\% sequence identity --- diverged enough that
+the TKF92 baseline alignment is no longer near-deterministic.
+The joint sampler concentrates posterior mass at Cys--Cys cells at
+$\sim$17$\times$ the background rate on the X axis and
+$\sim$12$\times$ on Y, against $\sim$5$\times$ for the
+single-sequence baselines (\Cref{fig:lama1-holmes-tile}). The
+per-pair coupling bonus is weak but detectable; pooled across
+the 72-sequence family MSA, the composite-likelihood posterior
+\emph{perfectly} rank-separates all 28 Cys--Cys cell-pairs from the
+non-Cys background (\Cref{fig:pf00053-msa-triangle}).
+
+% =============================================================
+\section{Discussion}
+\label{sec:discussion}
+% =============================================================
+
+%We described the stick-breaking-TKF92-with-Potts construction, a version of the TKF92 indel process that introduces direct site-coupling while maintaining exchangeability.
+%We presented bridge expectation formulae for the BDI and finite-state CTMC and demonstrated their use in variational bounds for coevolutionary models.
+TKF-DP introduces exchangeable \emph{nonlocal} coupling structure --- DP-clustered Potts
+interactions between residues that may sit anywhere on the sequence
+--- on top of a single TKF92 indel backbone. The companion
+\MixDom\ construction~\citep{LargeHolmes2026} and its recursive cousins introduce a
+different, \emph{local} kind of structure, positional and sequence-ordered, with composition and
+indel rate varying across a small mixture of
+latent domains. A realistic generative model of protein evolution
+should have both, with couplings restricted to within a domain
+or to specific local contexts: buried-core residues in a
+globular protein, base-paired residues in an RNA stem, or residues
+sharing a secondary-structure element. Combining nonlocally- and locally-structured models
+is a larger technical challenge but well within reach: the recursive
+grammars of Appendix~C provide the natural scaffolding for
+within-domain or within-element coupling structure.
+
+We made several approximations in our first evaluation of the TKF-DP.
+Two are worth calling out in detail.
+(1) We truncated the Ewens prior of
+\Cref{eq:infinite-phmm} to size-$\{1,2\}$ components; larger
+Potts components admit an independent-coupling lower bound
+($N{=}1$ in the midpoint refinement of Appendix~D) that extends
+to a formal ELBO by mesh-refining the midpoint construction,
+recovering the Cohn fixed point as midpoint spacing tends to zero.
+(2) We used the standard simplification of treating substitution as conditional on
+the alignment-visible fragments alone; a more careful treatment
+would account for the substitution effect on alive sites of
+transient ghost / gravestone lineages during their lifetimes. We
+conjecture that this effect can be absorbed into a mean-field
+correction using the expected trajectory sufficient statistics of
+\Cref{sec:rung2}, with a heavier importance-sampling treatment
+available via MCMC from the trajectory SCFG itself.
+
+The hierarchical-DP schema we present here --- one DP each for site
+classes, Potts-atom indices, and key classes --- is one design
+among many; alternative atom-sharing structures, hierarchical
+class groupings, or supervised training schemes remain unexplored.
+Further, our use of the DP to induce coupling is transferable to other indel models.
+For example, the Poisson Indel Process~\citep{bouchardcote2013} yields a
+column-independent PIP-DP variant
+while preserving the DP latent structure.
+
+%The closest antecedents are the Yu--Thorne RNA model
+%(tree-structured Potts-like coevolution under mean-field VI, on a
+%fixed alignment, with no DP prior or gravestone augmentation) and
+%the Wilburn--Eddy hidden Potts model (profile-HMM indel architecture
+%with Potts emissions, for remote homology search rather than
+%multiple alignment); both are compatible with the present
+%construction.
+
+
+%\paragraph{Outlook.}
+
+
+
+%\paragraph{Software, data, and reproducibility.}
+%All code, trained checkpoints, and benchmark artefacts are
+%publicly available at the
+%\href{https://github.com/${REPO_OWNER}/tkfdp}{tkf-dp} and
+%\href{https://github.com/${REPO_OWNER}/tkf-mixdom}{tkf-mixdom} repositories,
+%the latter folded in as a git submodule of the former. The
+%released $K_c{=}4$ checkpoint is tagged
+%\verb|K4-emwarm-top1000-2026-05-09|; the corpus-trained
+%\MixDom\ checkpoints \verb|bw_d3f2_fullseed_15iter.npz| and
+%\verb|svi_bw_d3f1c{3,10}_*.npz| are likewise in the
+%\verb|tkf-mixdom| repository's release artefacts.
+%The complete derivation of every closed-form result above lives in
+%the long supplement; the present paper is a guided tour.
+
+% =============================================================
+\section*{Acknowledgements}
+% =============================================================
+
+We thank Jeff Thorne, Sean Eddy, Jotun Hein, Debora Marks, Yun Song, Marc Suchard, Gerton Lunter, Nick Goldman, Nicola De Maio, and Elena Rivas for helpful discussions.
+Selected mathematical derivations and exposition were generated by Anthropic's Claude under the supervision, and following the intuition, of the human authors.
+The work was funded by NIH grants HG004483, GM080203, and HG013117.
+
+% =============================================================
+\section*{Author contributions}
+% =============================================================
+
+I.H.\ led theory and software development, experimental evaluation, and writing.
+A.L.\ developed independent JAX implementations of the mixture-of-sites, -fragments, and
+-domains generalisations of TKF92 with Adam-based fitting pipelines.
+Both authors approved the text.
+
+\newpage
+% =============================================================
+\section*{Appendix: roadmap}
+% =============================================================
+
+The technical body of this work --- BDI sufficient statistics,
+exact closed-form Baum--Welch for TKF91/TKF92/\MixDom, Maraschino
+cherry-distillation, the time-indexed gravestone-augmented pair
+SCFG, the TKF-DP generative graph and inference loop, the infinite
+Pair HMM MCMC kernel, and the bounded-edge alignment
+postprocessing family --- is collected into five appendices whose
+contents are largely quoted verbatim from the two companion
+manuscripts. The roadmap is:
+
+\begin{description}
+\setlength{\itemsep}{0.2em}
+\item[Appendix A.] BDI and TKF foundations.
+  The finite-state CTMC and linear birth--death--immigration
+  process, the closed-form bridge-expectation and Fisher-score
+  sufficient statistics for TKF91 and TKF92, the singlet-division
+  WFST derivation, the L'H\^opital limits at $\lambda{=}\mu$, and
+  a discussion of how TKF92 relates to the latent-boundary-free
+  General Geometric Indel (GGI) model.
+
+\item[Appendix B.] EM, composite likelihoods, and variational
+  inference. Closed-form substitution M-steps for the many GTR
+  specialisations; the stochastic-variational Baum--Welch loop
+  for TKF91/TKF92 with its ELBO derivation, natural-gradient
+  updates, and convergence theorem; Maraschino, the TKF92
+  cherry-distilled generalisation of CherryML, and the
+  tree-level inference algorithms it composes with (FSA, BeamASR,
+  VarAnc, svi-VarAnc); and a structural-bias analysis of the BP
+  cumulant under a column-factorised variational field.
+  
+\item[Appendix C.] Recursive TKF.
+  The hierarchical-mixture-of-domains generalisation of TKF92
+  (\MixDom), its exact closed-form M-step via six-step
+  chain-restoration through the fully exploded null-state model,
+  the order-1 Maraschino distillation, the algebraic-distillation
+  family, the SVI-BW convergence considerations specific to
+  \MixDom, the tree-level VEM and ancestral-reconstruction
+  algorithms, the generalised phylo-HMM, the labeled-MixDom
+  Singlet and WFST, and the recursive-grammar-elaboration rules
+  that lift these constructions to arbitrary nested-TKF models.
+  
+\item[Appendix D.] TKF-DP: the Dirichlet-process Potts coupling.
+  The generative model of \Cref{defn:tkfdp}, the
+  three-DP latent structure, the class-level path-measure
+  factorisation and constant-rate variational ELBO via
+  pairwise bridge expectations, the augmented indel histories via
+  the time-indexed pair SCFG, the SVI loop, and the pairwise
+  alignment postprocessing landscape (joint-marginal target,
+  coupled annealer, augmented-Pair-HMM family).
+
+\item[Appendix E.] The infinite Pair HMM and its block-resample
+  MCMC sampler. The three-factor factorisation of
+  \Cref{eq:infinite-phmm}; the setup-phase $O(L^4)$ partial-Forward
+  precompute; the per-sweep $O(L)$ block-resample kernel;
+  and the projected lift to the full
+  gravestone-augmented phylogenetic SCFG.
+\end{description}
+
+
+\newpage
+\begin{figure}[p]
+\centering
+\vspace*{\fill}
+\includegraphics[width=\textwidth,height=\textheight,keepaspectratio]{tkf_trajectory_uber.pdf}
+\vspace*{\fill}
+\end{figure}
+\clearpage
+
+\begin{figure}[p]
+\vspace*{\fill}
+\caption{\textbf{TKF91 indel trajectory as a Galton--Watson branching
+    process and its gravestone-augmented SCFG parse tree.}
+    \textit{Top:} the gravestone-augmented SCFG parse tree, with each
+    non-terminal annotated by its symbolic time arguments $(t, T)$ in
+    terms of the event indices $t_1, \ldots, t_{13}$ that label the
+    middle panel's vertical axis. Each $L(\cdot)$ leaf-terminal
+    ($A$ for surviving lineages, $G_{\tau}$ for transient ones) sits
+    directly above its corresponding trajectory column; the faint
+    dotted vertical guides carry the eye from each parse-tree
+    terminal down through the trajectory column and into its lottery
+    ticket. Epsilon leaves ($\varepsilon$) terminate $D$-recursion and
+    $S$-recursion and are placed mid-way between their column-anchored
+    neighbours.
+    The event labels $t_k$ are assigned in fixed pre-order traversal
+    of the tree, so the parse-tree subscripts are deterministic; the
+    random topological sort over event times permutes only the
+    vertical axis ordering of the middle panel.
+    \textit{Middle:} one realisation of the continuous-time TKF91
+    process on a branch of length $T$. Columns are residue lineages,
+    time runs downward from $0$ to $T$. Open circles ($\circ$) mark
+    birth events; filled circles ($\bullet$) mark survival to $T$;
+    crosses ($\times$) mark death events. The ancestral marker
+    $\mathrm{M}$ (col.~1) survives to $T$ and spawns a transient
+    insert $\mathrm{G}$ (col.~2; lifetime $t_1 \to t_2$), which
+    itself spawns a deeper transient $\mathrm{G}$ (col.~3;
+    $t_3 \to t_4$). The insertion $\mathrm{I}$ (col.~4) is born at
+    $t_5$ and survives. The ancestral site $\mathrm{D}$ (col.~5)
+    dies at $t_6$ after spawning three transient inserts (cols.~6,
+    7, 9; lifetimes $t_7 \to t_8$, $t_9 \to t_{10}$, $t_{12} \to
+    t_{13}$); the second of these transients itself spawns the
+    surviving insertion $\mathrm{I}$ (col.~8) at $t_{11}$. The
+    horizontal arrows depict the SCFG branching production
+    $D(t,T) \to L(t-u) \cdot D(t,T)$ firing at each child link's
+    birth; the immortal link (dashed) anchors the leftmost lineage.
+    \textit{Bottom:} a row of red lottery tickets cartooning the
+    TKF-DP Potts-coupling layer: each surviving column draws a
+    random integer ``key'' (here a three-digit number) from the
+    Chinese restaurant process partition. Most keys are unique, but
+    two distant alive columns happen to share a key (the MATCH),
+    which is precisely the event in which two sites end up at the
+    same CRP table and acquire a Potts coupling under the K=4 model
+    of \Cref{sec:rung3}.
+%  Generated by \texttt{math-paper/figures/tkf\_trajectory\_uber.py "M(G(G))ID(GG(I)G)" --seed 99 --lottery-seed 99}.
+}
+\label{fig:tkf-trajectory}
+\vspace*{\fill}
+\end{figure}
+\clearpage
+
+\begin{figure}[p]
+\centering
+\vspace*{\fill}
+% Row 1: per-event BDI consistency for B, D, S (3 panels).
+\includegraphics[width=0.32\textwidth]{bdi_consistency_B.pdf}\hfill
+% Use the high-mu regenerated D panel (figures/bdi_consistency_D_highmu.pdf)
+% so the deaths range covers D in {0..5+} rather than D in {0, 1} only.
+% Generator: math-paper/figures/fig_bdi_consistency_highmu.py.
+\includegraphics[width=0.32\textwidth]{bdi_consistency_D_highmu.pdf}\hfill
+\includegraphics[width=0.32\textwidth]{bdi_consistency_S.pdf}\\[1em]
+% Row 2: TKF BDI moments (3 internal subpanels: B, D, S means).
+\includegraphics[width=\textwidth]{tkf_bdi_validation_means.pdf}\\[1em]
+% Row 3: TKF BDI residual scaling (3 internal subpanels: B, D, S shrinkage).
+\includegraphics[width=\textwidth]{tkf_bdi_validation_shrinkage.pdf}
+\vspace*{\fill}
+\end{figure}
+\clearpage
+
+\begin{figure}[p]
+\vspace*{\fill}
+\caption{\textbf{BDI / TKF sufficient-statistic validation.}
+Top row, panels (a)--(c): closed-form score-identity expectations
+(analytic) plotted against Gillespie sample means
+(simulation, $10^7$ trajectories per regime at low rates;
+$10^6$ trajectories at higher rates) for births $B$ (left),
+deaths $D$ (middle), and time-integrated alive count $S$
+(right). Each point is one $(\lambda, \mu, t, i_0)$ regime; the
+identity-line scatter is below plotting precision across
+$\kappa < 1$, $\kappa = 1$ (L'H\^opital diamonds), and $\kappa > 1$.
+The five low-rate regimes ($\lambda, \mu \sim 0.01$--$0.10$, $t \sim 1$)
+sweep $\E[D]$ over $\sim$0--1 (most trajectories see at most one
+death); three additional higher-rate regimes
+($\lambda, \mu \sim 0.3$--$0.6$, $t \sim 2.5$--$3$) extend the D panel
+through $\E[D] \approx 5$, exercising the score identity across an
+order of magnitude in event count without bias. Numerals beside each
+point are the descendant count $j$ that bin represents; residual
+scatter at the largest $j$ reflects per-bin MC noise that shrinks
+as $1/\sqrt{n_{\rm bin}}$. Error bars are
+standard errors of the mean ($\mathrm{SE} = \sigma_\mathrm{sim} /
+\sqrt{n_{\rm bin}}$).
+Panel (d): TKF91/TKF92 BDI moments via Gillespie ($2 \times 10^7$ sims
+per regime, 5 regimes) against the closed-form expressions; tight
+identity-line. Panel (e): relative Gillespie residual scaling as
+$1/\sqrt{n_{\mathrm{sim}}}$ over 800 replicate seeds per $n_{\mathrm{sim}}$,
+three representative regimes (general, L'H\^opital, low-rate $i_0{=}3$);
+no detectable offset.}
+\label{fig:bdi-and-tkf-validation}
+\vspace*{\fill}
+\end{figure}
+\clearpage
+\begin{figure}[p]
+\centering
+\vspace*{\fill}
+\includegraphics[width=\textwidth]{k4_coupling_score.pdf}
+\vspace*{\fill}
+\end{figure}
+\clearpage
+
+\begin{figure}[p]
+\vspace*{\fill}
+\caption{\textbf{Stationary coupling log-odds at a coupled site-pair
+    in the K=4 TKF-DP model.}
+    Cell $(a, b)$ shows
+    $\log_2 [\pi_{\rm joint}(a, b) / (\pi_{\rm singlet}(a)\,
+    \pi_{\rm singlet}(b))]$
+    in the $t \to 0$ limit, under the canonical convention (LG08
+    pair-stationary background + empirical class prior $\pi_c =
+    (0.20, 0.23, 0.33, 0.24)$ from SVI training-set column
+    assignments). \emph{Red} cells are enriched at coupled
+    sites relative to the singlet product (positive log-odds);
+    \emph{blue} cells are depleted.
+    The strongest positive cells are $\mathrm{C}$--$\mathrm{C}$
+    ($+2.51$ bits; the disulfide-bridge signature: cysteine pairs
+    co-occur far more often at structurally coupled positions than
+    background frequencies predict), $\mathrm{M}$--$\mathrm{M}$
+    ($+2.32$), and $\mathrm{I}$--$\mathrm{I}$ ($+1.93$); the
+    strongest off-diagonal positive is $\mathrm{M}$--$\mathrm{Y}$
+    ($+1.66$), consistent with the methionine--aromatic
+    (sulfur--$\pi$) stabilising interaction documented in folded
+    structures \citep{ValleyEtAl2012}. The strongest negative
+    cells include several pairs whose Chou--Fasman
+    secondary-structure propensities are antagonistic ---
+    $\mathrm{P}$--$\mathrm{W}$ ($-3.08$),
+    $\mathrm{L}$--$\mathrm{P}$ ($-2.12$),
+    $\mathrm{K}$--$\mathrm{P}$ ($-1.63$) all pair the
+    helix/strand breaker proline with strong helix or strand
+    formers \citep{ChouFasman1974} --- though the pattern is
+    not uniformly explained by secondary-structure preferences
+    alone: top empirical negatives also include
+    $\mathrm{C}$--$\mathrm{E}$ ($-2.36$),
+    $\mathrm{G}$--$\mathrm{R}$ ($-2.21$), and a Trp column with
+    broad aversion that the low Trp background frequency
+    ($\pi(\mathrm{W}) \approx 0.011$ in LG08) likely inflates.
+    Mean per-class-pair MI under this convention is
+    $\sim$0.54~nats / 0.78~bits (atom-averaged).
+    % Released checkpoint \texttt{K4-emwarm-top1000-2026-05-09}.
+    }
+\label{fig:k4-coupling-score}
+\vspace*{\fill}
+\end{figure}
+\clearpage
+
+\begin{figure}[p]
+\centering
+\vspace*{\fill}
+\includegraphics[width=\textwidth]{holmes_tile_PF00053_lama1_test.pdf}
+\vspace*{\fill}
+\end{figure}
+\clearpage
+
+\begin{figure}[p]
+\vspace*{\fill}
+\caption{\textbf{Coevolutionary signal boosts Cys--Cys disulfide
+    bond identification on a sequence pair from a held-out test
+    family.} Sequences X, Y are two EGF-like repeats of human
+    \textbf{LAMA1} (laminin subunit $\alpha$-1, UniProt
+    \texttt{P25391}; \Pfam\ Laminin EGF-like family
+    \texttt{PF00053}, held out from K=4 training).
+    X is LAMA1 residues 1452--1506
+    ($L_x{=}55$, 8 Cys forming 4 UniProt-annotated disulfides
+    (circled) at seq-pos $(1,15), (3,25), (28,37), (40,55)$);
+    Y is the LAMA1 repeat two positions earlier,
+    residues 1090--1147 ($L_y{=}58$, 10 Cys: the same 4 disulfides at
+    seq-pos $(1,13), (3,29), (31,40), (43,58)$ plus 2 \emph{free}
+    Cys at LAMA1 positions 1109 and 1111 not in any annotated
+    disulfide). \textit{Panels (c, f):} TKF92 baseline alignment
+    posterior (lower-left, lower-right) vs the TKF-DP alignment
+    posterior after coupled-edge resampling (upper-right); the
+    diagonal is sharpened by the coupling boost on conserved
+    disulfide cells. \textit{Panels (a, b):} single-sequence X/Y
+    edge posteriors (no homolog evidence; Cys--Cys cells receive
+    only the per-pair model boost and the matching-constraint
+    prior). \textit{Panels (d, e):} joint sampler edge posteriors
+    at the same Cys positions, with the homolog providing
+    positional discrimination across the diverged alignment.
+    The joint sampler concentrates posterior mass at Cys--Cys
+    cells at $\sim$17$\times$ the background rate on the X axis
+    ($0.074$ vs $0.004$) and $\sim$12$\times$ on Y
+    ($0.047$ vs $0.004$); the single-sequence baselines give
+    only $\sim$5$\times$ each. Sampler: joint pair replica-exchange
+    ladder $\alpha_z \in \{100, 250, 700, 2000, 10^4\}$, 8000 sweeps
+    + 1500 burn-in; single-sequence ladder
+    $\alpha_z \in \{100, 500, 2000, 10^4\}$, 10000 sweeps + 1000
+    burn-in.}
+\label{fig:lama1-holmes-tile}
+\vspace*{\fill}
+\end{figure}
+\clearpage
+
+\begin{figure}[p]
+\centering
+\vspace*{\fill}
+\includegraphics[width=\textwidth]{holmes_msa_triangle_PF00053.pdf}
+\vspace*{\fill}
+\end{figure}
+\clearpage
+
+\begin{figure}[p]
+\vspace*{\fill}
+\caption{\textbf{Composite-likelihood MSA-column edge-pair posterior
+    for the held-out PF00053 (Laminin EGF-like) family.}
+    Layout from \citet{Holmes2004} Fig.~14. \emph{Top:} triangular
+    heatmap $P(\text{cols}\;(k_1, k_2)\;\text{connected}\,\mid\,\text{family MSA})$
+    aggregated over 8 sequence pairs by the infinite Pair HMM
+    sampler at the canonical convention. Gappy columns
+    (gap-fraction $> 0.5$) are masked light grey. \emph{Bottom:}
+    the 72-sequence PF00053 MSA coloured by AA chemistry (gap = light
+    grey); red arcs connect the top-scoring column pairs in the
+    triangle above. Cys columns (yellow) at MSA positions
+    $\{1, 3, 18, 36, 39, 48, 51, 72\}$ --- the canonical
+    Laminin EGF-like 8-cysteine pattern.
+    The signal is striking: the chain achieves
+    \emph{perfect rank-separation} of Cys--Cys cells from
+    background. With 8 Cys columns there are
+    $\binom{8}{2} = 28$ candidate Cys--Cys pairs, and the top-28
+    cells in the composite posterior are exactly those 28 pairs
+    --- every single Cys--Cys pair ranks above every non-Cys cell.
+    Notably, this perfect rank-separation is a property of the
+    \emph{multi-pair composite}; the underlying single-pair
+    posteriors do not achieve it. On the single LAMA1 pair of
+    \Cref{fig:lama1-holmes-tile}, the minimum-$N$ to cover all
+    Cys--Cys cells is $N{=}124$ for panel (a),
+    $N{=}291$ for (b), $N{=}1402$ for (d), and $N{=}1500$ for (e)
+    --- far above the perfect $N{=}28$ / $N{=}45$ that the
+    respective C-Cys counts would allow. The composite likelihood
+    averages out per-pair alignment noise; only consistent
+    across-pair Cys--Cys signal survives.
+    Mean Cys--Cys posterior $\langle P \rangle = 0.060$ vs
+    $0.0037$ at non-Cys non-gappy background
+    ($\sim$16$\times$ enrichment) --- identical ratio to the
+    single-pair LAMA1 figure (\Cref{fig:lama1-holmes-tile}). The
+    chain distributes mass across all 28 candidate Cys--Cys pairs
+    without discriminating the 4 \emph{true} disulfide bonds from
+    the other 24. This is the model's expected behaviour: the per-pair
+    coupling boost $M_{\rm solo}[a, c]$ is position-agnostic
+    (it depends only on the AA pair $(a, c) = (C, C)$, not on
+    the columns), so additional discrimination would have to come
+    from phylogenetic conservation patterns the present
+    composite-likelihood does not yet exploit.
+    Sampler: 1500 sweeps + 300 burn-in per pair, 5-rung RE ladder
+    $\alpha_z \in \{100, 250, 700, 2000, 10^4\}$.}
+\label{fig:pf00053-msa-triangle}
+\vspace*{\fill}
+\end{figure}
+\clearpage
+
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\end{document}

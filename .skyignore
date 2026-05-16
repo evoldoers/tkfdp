@@ -1,0 +1,35 @@
+# Exclude bulk paper/figure assets from SkyPilot workdir uploads.
+# The AWS workers only need src/, analysis/, results/<checkpoint>/_best_chkpt/,
+# aws/, and a handful of small files. Everything else just inflates the
+# upload + cost.
+
+math-paper/
+results/_v*
+results/qprime_cache/
+results/balibase-runs/
+results/exp*/
+results/re_diag/
+results/old_*
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.pdf
+*.synctex.gz
+*.toc
+
+.git/
+.gitmodules
+.skyignore
+*.pyc
+__pycache__/
+.pytest_cache/
+.venv/
+node_modules/
+
+# Backup folders we created during the v5..v10 restarts.
+_v*
+*.v*_*

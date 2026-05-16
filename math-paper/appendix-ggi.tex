@@ -1,0 +1,120 @@
+% =============================================================
+% Appendix A.7: The General Geometric Model.
+%
+% Source: ~/evolmoves/doc/tex/main.tex, subsection "The GGI and
+% TKF92 models" (lines ~324-426 of that file at the time of this
+% paper's release). Quoted near-verbatim with the following local
+% adaptations:
+%   * \fragext -> \ext (the supplement uses \ext for the TKF92
+%     fragment-extension probability r).
+%   * \prob{k}     -> P(k)
+%     \prob{n}     -> P(n)
+%   * Stripped \index{...} commands.
+%   * Removed a forward-reference to ``Section tkftriad'' that does
+%     not exist in this supplement (the corresponding triad
+%     construction lives in the Maraschino / VarAnc subsections of
+%     Appendix B and is not the relevant cross-reference here).
+%
+% The \section{} below becomes a \subsection under \demote in the
+% outer supplement, i.e. it renders as A.7.
+% =============================================================
+
+\section{The General Geometric model}
+\label{sec:ggi-tkf92}
+
+Ideally, the underlying evolutionary model we'd use for indels would be the General Geometric Indel (GGI) model \cite{Holmes2020,DeMaio2020}.
+The GGI model is, in some sense, the maximum-entropy indel model for a given
+expected rate and length of indels.
+Unfortunately, the probability distributions of aligned ancestor-descendant sequences
+at finite times under this model are hard to solve.
+It turns out that the pairwise alignment distributions under the GGI model are well approximated by the TKF92 model \cite{ThorneEtAl92}, so we use that model for inference.
+In this section we discuss the relationship between the models
+and, in particular, how we can map parameters between them in a principled way.
+
+The GGI model has parameters $(\insrate_0,\delrate_0,x,y)$.
+In this model, the instantaneous rate of insertion of $k$
+residues at any available site is $\insrate_0 x^{k-1} (1-x)$
+(with the residues themselves sampled from a stationary distribution),
+while the instantaneous rate of deletion of a stretch of exactly $k$ contiguous residues
+is $\delrate_0 y^{k-1} (1-y)$.
+For reversibility (or, indeed, the existence of an equilibrium) we require that
+$\insrate_0 y (1-x) = \delrate_0 x (1-y)$.
+The mean insertion and deletion lengths are $1/(1-x)$ and $1/(1-y)$.
+The rate at which any given residue is deleted,
+counting deletions that start at or before that residue (in an infinitely long sequence),
+is $\delrate_0 / (1-y)$.
+The probability that a sequence has length $n$ at equilibrium is $(x/y)^n(1-x/y)$,
+so the expected sequence length at equilibrium
+is $\ell_{\mathrm{GGI}} = \frac{x/y}{1-x/y} = \frac{1}{y/x-1}$.
+
+The TKF92 model has parameters $(\insrate,\delrate,\ext)$.
+In this model,
+$k$-residue fragments (where $k>0$ and $P(k) = \ext^{k-1}(1-\ext)$) are inserted and deleted at rates $\insrate,\delrate$.
+The rate at which any given residue is deleted
+is just the rate at which its fragment is deleted, $\delrate$.
+The mean number of fragments at equilibrium is
+$\frac{\insrate/\delrate}{1-\insrate/\delrate} = \frac{1}{\delrate/\insrate - 1}$
+and the mean fragment length is $1/(1-\ext)$,
+so the mean sequence length at equilibrium is
+$\ell_{\mathrm{TKF}} = \frac{1}{(\delrate/\insrate - 1)(1 - \ext)}$.
+The precise distribution of sequence lengths at equilibrium is
+a zero-altered geometric distribution
+\[
+P(n) = \left\{
+\begin{array}{ll}
+1 - \frac{\insrate}{\delrate} & \mbox{if $n=0$} \\
+\frac{\insrate}{\delrate} \left( \ext + (1-\ext)\frac{\insrate}{\delrate} \right)^{n-1} (1-\ext) \left( 1 - \frac{\insrate}{\delrate} \right) & \mbox{if $n>0$}
+\end{array}
+\right.
+\]
+
+The mean length of an insertion in TKF92 is $1/(1-\ext)$, i.e.\ the expected fragment length.
+For deletions, things are slightly more complicated. Superficially,
+it looks like deletions are also fragments so they should have the same mean length.
+However, if we do not have knowledge of the fragment boundaries,
+but are conditioning just on the current sequence length (as in GGI),
+we have to weight this by the posterior probability that the subsequence being deleted does in fact constitute a single fragment.
+For a subsequence of length $k$, this posterior probability is proportional to
+$\left(\frac{\ext}{\ext + (1-\ext)\frac{\insrate}{\delrate}}\right)^{k-1}$
+(indels at the end of the sequence have a slightly different correction factor
+since they are more likely to constitute a fragment, but the $k$-dependence is the same).
+The rate of starting an insertion or deletion {\em at a particular site}
+is subject to a similar correction factor.
+
+Given the equilibrium constraint on GGI, each model has three free parameters.
+In order to find a correspondence, it is useful to match moments (expectations).
+In view of the above discussion, the most natural expectations to equate are
+(in the form ``GGI expectation = TKF92 expectation'')
+\begin{itemize}
+    \item The mean deletion rate of a given residue: $\delrate_0/(1-y) = \delrate$
+    \item The mean length at equilibrium: $\frac{1}{y/x-1} = \frac{1}{(\delrate/\insrate - 1)(1 - \ext)}$
+    \item The mean length of an insertion event: $1/(1-x) = 1/(1-\ext)$ so $x=\ext$.
+\end{itemize}
+
+These equations, together with the reversibility constraint
+$\insrate_0 y (1-x) = \delrate_0 x (1-y)$,
+fully specify a one-to-one mapping between GGI and TKF92.
+In what follows, we will simply use the TKF92 parameters
+$(\insrate, \delrate, \ext)$ and likelihoods
+(including the zero-adjusted equilibrium length distribution),
+but with the understanding that we are approximating GGI.
+In particular, when we jointly sample the pairwise alignments around any
+given node in the phylogenetic tree, we will {\em not} require the fragment
+boundaries to coincide (as would be the case in TKF92).
+Technically speaking, any indel model parameter priors should be on the GGI parameters
+rather than the TKF92 ones, but since we are using uninformative priors
+this may be an acceptable compromise.
+
+One way in which the TKF92 model, where the process state is augmented with latent fragment boundaries,
+deviates from the sequence-only GGI is that when we use the TKF92 Pair HMM
+(with the fragment boundaries marginalized out) as an approximation to $P(X_t|X_0)$,
+we cannot expect it perfectly to obey the
+Chapman-Kolmogorov equation $P(X_{t+u}=x''|X_0=x) = \sum_{x'} P(X_t=x'|X_0=x)P(X_{t+u}=x''|X_t=x')$.
+This has consequences for any MCMC moves that split branches using a Pair HMM
+(which models exactly the Chapman-Kolmogorov equation), since it means that those moves will be
+miscalibrated in probability, but the approximation should be mild.
+In fact, it seems possible that no five-state ($\smide$) Pair HMM exactly obeys the Chapman-Kolmogorov equation
+for a GGI model, except in the special case where the model reduces to the TKF91 model.
+The best approximations known are obtained by matching moments of the underlying counting process
+and thereby deriving ODEs for the transition probabilities \cite{Holmes2020}.
+However, the TKF92 model is a close runner-up (and actually appears to fit real data better).

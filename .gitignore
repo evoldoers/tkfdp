@@ -1,0 +1,52 @@
+math-paper/*.aux
+math-paper/*.log
+math-paper/*.bbl
+math-paper/*.blg
+math-paper/*.out
+math-paper/*.toc
+math-paper/main.pdf
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.pdf
+*.synctex.gz
+*.toc
+
+# Editor backups
+*~
+.#*
+\#*\#
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# Claude / editor metadata
+.claude/
+
+# Large data caches and external downloads
+data/pdb_cache/
+data/pfam_full/
+
+# Run outputs (regenerated from scripts; commit only REPORT.md text)
+logs/
+results/exp1_*/
+results/exp2_*/
+results/exp3_*/
+results/re_diag/
+results/*.png
+results/*.npy
+results/*.json
+results/K4-emwarm-top1000-2026-05-09.tar.gz
+results/K4-emwarm-top1000-2026-05-09/
