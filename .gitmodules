@@ -1,0 +1,6 @@
+[submodule "math-paper/tkf-mixdom"]
+	path = math-paper/tkf-mixdom
+	url = git@github.com:evoldoers/tkf-mixdom.git
+[submodule "bio-datasets"]
+	path = bio-datasets
+	url = git@github.com:evoldoers/bio-datasets.git

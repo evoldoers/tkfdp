@@ -1,0 +1,2 @@
+benchmark,method,model,sp,tc,seconds,n_seqs,error
+BB11001,tkfdp_mcmc,K4_emwarm,0.897119341563786,0.8947368421052632,131.09017276763916,4,

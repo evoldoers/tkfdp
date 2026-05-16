@@ -1,0 +1,125 @@
+# SkyPilot task: warm up the JAX persistent cache on a g5.xlarge,
+# tar it, push to S3. Run-once recipe before the per-pair workers.
+#
+# Usage:
+#   sky launch -c jit-primer aws/balibase_jit_primer.yaml --down -y
+#
+# Cost: ~$0.10. Wall: 15-25 min.
+
+resources:
+  cloud: aws
+  # No region pin -- let SkyPilot pick whichever has on-demand
+  # quota + capacity.
+  instance_type: g5.xlarge
+  # ON-DEMAND. We initially tried spot (use_spot: true) and burned
+  # ~35 min thrashing across us-east-1, ap-northeast-2, eu-west-1/2,
+  # eu-central-1, ap-south-1, ap-northeast-1, ap-southeast-2 hitting
+  # either InsufficientInstanceCapacity or MaxSpotInstanceCountExceeded.
+  # On-demand at $1.00/hr * 20 min = $0.33 -- cheap-enough.
+  use_spot: false
+  accelerators: A10G:1
+  disk_size: 64
+
+# workdir = tkf-dp (slimmed to ~13 MB via .skyignore).
+workdir: /home/yam/tkf-dp
+
+# Targeted mounts. Layout matches the path the sweep script expects:
+# TKFMIXDOM = Path.home() / "tkf-mixdom" / "python"
+# (sweep_infinite_phmm_balibase.py:71); util/expected_pair_f1 is
+# imported via sys.path.insert at line 376. So we land the entire
+# tkfmixdom package at the expected path rather than a separate
+# tkfmixdom_pkg prefix.
+file_mounts:
+  /home/ubuntu/tkf-mixdom/python/tkfmixdom: /home/yam/tkf-mixdom/python/tkfmixdom
+  /home/ubuntu/tkf-mixdom/python/pyproject.toml: /home/yam/tkf-mixdom/python/pyproject.toml
+  /home/ubuntu/tkf-mixdom/python/experiments/tkf92_fitted_params.json: /home/yam/tkf-mixdom/python/experiments/tkf92_fitted_params.json
+  /home/ubuntu/tkf-mixdom/python/experiments/expected_pairwise_balibase.py: /home/yam/tkf-mixdom/python/experiments/expected_pairwise_balibase.py
+  /home/ubuntu/bio-datasets/data/balibase/bali3pdbm: /home/yam/bio-datasets/data/balibase/bali3pdbm
+
+envs:
+  S3_BUCKET: tkf-mixdom-gpu-618647024028
+  JIT_CACHE_KEY: jax-cache/g5xl-jax-2026-05-15.tar.gz
+
+setup: |
+  # No OS-level sleep-poweroff -- SkyPilot's setup wrapper waits on
+  # ALL child PIDs (even disowned ones, because their defunct shells
+  # are still attached to the parent process group). Backgrounded
+  # sleep blocks the setup block from ever exiting. We rely on
+  # `sky launch --down --idle-minutes-to-autostop` for teardown.
+
+  # Install JAX + the tkfmixdom package + tkf-dp source in editable mode.
+  sudo apt-get -y update
+  sudo apt-get -y install python3-pip python3-venv
+  python3 -m venv ~/venv
+  source ~/venv/bin/activate
+  pip install -U pip wheel
+  pip install -e /home/ubuntu/tkf-mixdom/python   # the tkfmixdom pkg
+  pip install "jax[cuda12]"
+  pip install awscli                            # needed to push the cache to S3
+  # tkf-dp itself is in ~/sky_workdir as a plain script-tree (no setup.py);
+  # we run it directly. BALI_ROOT = Path.home()/"bio-datasets"/... which on
+  # the worker is /home/ubuntu/bio-datasets/... -- exactly where the
+  # bali3pdbm file_mount lands, so no symlink is needed. (The previous
+  # `ln -sfn` here pointed at itself and tripped Errno 40 "Too many levels
+  # of symbolic links" when iterdir() walked into it.)
+
+  # Persistent JIT cache location.
+  mkdir -p ~/.cache/jax
+
+run: |
+  # Fail loudly if any step errors. Without this, an upstream Python
+  # crash propagates to the final `echo "PRIMER DONE"` which still
+  # exits 0, so SkyPilot marks the job SUCCEEDED and an empty cache
+  # gets "pushed" (or in the previous incident, the push silently
+  # failed because awscli wasn't installed, but the job still
+  # exited 0).
+  set -euo pipefail
+
+  source ~/venv/bin/activate
+  # JAX 0.4.x renamed JAX_PERSISTENT_CACHE_DIR -> JAX_COMPILATION_CACHE_DIR.
+  # Set BOTH so the cache works regardless of the installed jax version,
+  # and set the min entry size to -1 so even tiny kernels get cached
+  # (default is 64 KiB, which would skip many of our DP-step JITs).
+  export JAX_COMPILATION_CACHE_DIR=~/.cache/jax
+  export JAX_PERSISTENT_CACHE_DIR=~/.cache/jax
+  export JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES=-1
+  export JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS=0
+  export XLA_PYTHON_CLIENT_PREALLOCATE=false
+
+  # Wipe both caches so the primer ALWAYS runs MCMC + JIT-compiles
+  # the kernels. On `sky exec` re-runs, both directories persist from
+  # the previous attempt; the per-pair Q'-cache (~/.cache/tkf-mixdom-balibase)
+  # triggers a "CACHE HIT" fast-path that bypasses MCMC entirely, and
+  # then no JIT happens so jax-cache stays empty.
+  rm -rf ~/.cache/tkf-mixdom-balibase ~/.cache/jax
+  mkdir -p ~/.cache/jax
+
+  cd ~/sky_workdir
+  # Run BB12041 (n=3, smallest) at low sweep count: just enough to
+  # trigger every JIT signature we'll hit at production. Wall <20 min.
+  timeout 1500 python analysis/scripts/sweep_infinite_phmm_balibase.py \
+    --checkpoint results/K4-emwarm-top1000-2026-05-09/_best_chkpt/state.npz \
+    --max-len 150 \
+    --n-sweeps 100 --n-burnin 10 \
+    --n-re-replicates 1 \
+    --fam-subset BB12041 \
+    --out /tmp/primer_out.json
+
+  # Sanity check: confirm the JIT cache actually got populated. If
+  # Python silently returned 0 (e.g. an import failure inside the
+  # outer try/except swallowed the real error and `Total pairs: 0`
+  # was the only sign), .cache/jax will be empty and the tarball
+  # would be ~120 bytes -- exactly the failure mode we've hit twice.
+  CACHE_BYTES=$(du -sb ~/.cache/jax | awk '{print $1}')
+  echo "JIT cache size: ${CACHE_BYTES} bytes ($(du -sh ~/.cache/jax | awk '{print $1}'))"
+  if [ "${CACHE_BYTES}" -lt 1048576 ]; then
+    echo "ERROR: JIT cache is < 1 MiB (${CACHE_BYTES} bytes). Sweep almost certainly did not run -- check upstream Python output for swallowed exceptions."
+    exit 3
+  fi
+
+  # Bundle the JIT cache and push.
+  cd ~
+  tar czf jax-cache.tar.gz .cache/jax/
+  ls -lh jax-cache.tar.gz
+  aws s3 cp jax-cache.tar.gz s3://${S3_BUCKET}/${JIT_CACHE_KEY}
+  echo "PRIMER DONE: pushed s3://${S3_BUCKET}/${JIT_CACHE_KEY}"

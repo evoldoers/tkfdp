@@ -1,0 +1,93 @@
+# SkyPilot task: run ONE BAliBASE family (all pairs in it) at
+# production sweep settings on a g5.xlarge SPOT instance with
+# pre-warmed JIT cache. Pushes the per-family diag JSON + Q'-cache
+# to S3.
+#
+# Smoke-test pre-cursor to the 16-parallel sweep across all 22
+# L<150 families: validates that one family runs end-to-end on spot
+# under the canonical wiring, gives us per-pair wall-clock and
+# spot-pool availability.
+#
+# Parameterised by env: FAMILY (default BB12041, the smallest n=3 fam).
+#
+# Usage:
+#   sky launch -c bb-one-family aws/balibase_one_family.yaml \
+#     --env FAMILY=BB12041 --down -y
+#
+# Hard cap: 4 h total (PRODUCTION sweep on 3 pairs at ~30 min each
+# = ~90 min on g5.xlarge if cache hits, plus 5-10 min setup; 4 h
+# = ~2.5x headroom for spot-restart / slowdowns).
+
+resources:
+  cloud: aws
+  instance_type: g5.xlarge
+  use_spot: false               # on-demand: g5 spot quota = 0 in
+                                # every region we tried (us-east-1
+                                # a/b/d/f, us-east-2, ap-northeast-2,
+                                # eu-north-1). Pending 1024 spot
+                                # quota request not yet approved.
+  accelerators: A10G:1
+  disk_size: 64
+
+workdir: /home/yam/tkf-dp
+
+file_mounts:
+  /home/ubuntu/tkf-mixdom/python/tkfmixdom: /home/yam/tkf-mixdom/python/tkfmixdom
+  /home/ubuntu/tkf-mixdom/python/pyproject.toml: /home/yam/tkf-mixdom/python/pyproject.toml
+  /home/ubuntu/tkf-mixdom/python/experiments/tkf92_fitted_params.json: /home/yam/tkf-mixdom/python/experiments/tkf92_fitted_params.json
+  /home/ubuntu/tkf-mixdom/python/experiments/expected_pairwise_balibase.py: /home/yam/tkf-mixdom/python/experiments/expected_pairwise_balibase.py
+  /home/ubuntu/bio-datasets/data/balibase/bali3pdbm: /home/yam/bio-datasets/data/balibase/bali3pdbm
+
+envs:
+  S3_BUCKET: tkf-mixdom-gpu-618647024028
+  JIT_CACHE_KEY: jax-cache/g5xl-jax-2026-05-15.tar.gz
+  RESULTS_PREFIX: balibase-runs/v11-aws-smoke
+  FAMILY: BB12041
+  CHECKPOINT: results/K4-emwarm-top1000-2026-05-09/_best_chkpt/state.npz
+
+setup: |
+  sudo apt-get -y update
+  sudo apt-get -y install python3-pip python3-venv
+  python3 -m venv ~/venv
+  source ~/venv/bin/activate
+  pip install -U pip wheel
+  pip install -e /home/ubuntu/tkf-mixdom/python
+  pip install "jax[cuda12]"
+  pip install awscli
+  mkdir -p ~/.cache/jax
+  aws s3 cp s3://${S3_BUCKET}/${JIT_CACHE_KEY} ~/jax-cache.tar.gz
+  tar xzf ~/jax-cache.tar.gz -C ~/
+  echo "JIT cache size on disk: $(du -sh ~/.cache/jax | awk '{print $1}')"
+
+run: |
+  set -euo pipefail
+  source ~/venv/bin/activate
+  export JAX_COMPILATION_CACHE_DIR=~/.cache/jax
+  export JAX_PERSISTENT_CACHE_DIR=~/.cache/jax
+  export JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES=-1
+  export JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS=0
+  export XLA_PYTHON_CLIENT_PREALLOCATE=false
+
+  cd ~/sky_workdir
+  OUT=/tmp/${FAMILY}_smoke.json
+
+  # Production sweep settings (matches main.tex tab:headline-aln
+  # config for the inf-PHMM K=4 RE row).
+  timeout 14000 python analysis/scripts/sweep_infinite_phmm_balibase.py \
+    --checkpoint ${CHECKPOINT} \
+    --max-len 150 --mcmc-diagnostics --n-re-replicates 2 \
+    --fam-subset ${FAMILY} \
+    --out ${OUT}
+
+  # Push results.
+  aws s3 cp ${OUT} s3://${S3_BUCKET}/${RESULTS_PREFIX}/${FAMILY}.json
+  CACHE_DIR="$HOME/.cache/tkf-mixdom-balibase/infinite_phmm_mcmc_K4_coupled_RE"
+  if [ -f "${CACHE_DIR}/${FAMILY}.npz" ]; then
+    aws s3 cp "${CACHE_DIR}/${FAMILY}.npz" \
+      "s3://${S3_BUCKET}/${RESULTS_PREFIX}/qprime/${FAMILY}.npz"
+  fi
+  if [ -f "${CACHE_DIR}/${FAMILY}.json" ]; then
+    aws s3 cp "${CACHE_DIR}/${FAMILY}.json" \
+      "s3://${S3_BUCKET}/${RESULTS_PREFIX}/qprime/${FAMILY}_qpcache.json"
+  fi
+  echo "FAMILY DONE: ${FAMILY} pushed to s3://${S3_BUCKET}/${RESULTS_PREFIX}/"

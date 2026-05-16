@@ -1,0 +1,85 @@
+% Requires: \usepackage{forest}
+%           \usetikzlibrary{arrows.meta}
+
+\begin{forest}
+  for tree={font=\small,
+            l sep=12pt, s sep=6pt,
+            parent anchor=south, child anchor=north,
+            edge={-{Stealth[length=4pt]}}, inner sep=2pt,
+            anchor=center}
+  [{$S$}
+    [{$L(T)$}
+      [{$A$}]
+      [{$D(T,\, T)$}
+        [{$L(T - t_{1})$}
+          [{$G_{t_{2} - t_{1}}$}]
+          [{$D(T - t_{1},\, t_{2} - t_{1})$}
+            [{$L(T - t_{3})$}
+              [{$G_{t_{4} - t_{3}}$}]
+              [{$D(T - t_{3},\, t_{4} - t_{3})$}
+                [{$\varepsilon$}]
+              ]
+            ]
+            [{$D(T - t_{1},\, t_{2} - t_{1})$}
+              [{$\varepsilon$}]
+            ]
+          ]
+        ]
+        [{$D(T,\, T)$}
+          [{$\varepsilon$}]
+        ]
+      ]
+    ]
+    [{$S$}
+      [{$L(T - t_{5})$}
+        [{$A$}]
+        [{$D(T - t_{5},\, T - t_{5})$}
+          [{$\varepsilon$}]
+        ]
+      ]
+      [{$S$}
+        [{$L(T)$}
+          [{$G_{t_{6}}$}]
+          [{$D(T,\, t_{6})$}
+            [{$L(T - t_{7})$}
+              [{$G_{t_{8} - t_{7}}$}]
+              [{$D(T - t_{7},\, t_{8} - t_{7})$}
+                [{$\varepsilon$}]
+              ]
+            ]
+            [{$D(T,\, t_{6})$}
+              [{$L(T - t_{9})$}
+                [{$G_{t_{10} - t_{9}}$}]
+                [{$D(T - t_{9},\, t_{10} - t_{9})$}
+                  [{$L(T - t_{11})$}
+                    [{$A$}]
+                    [{$D(T - t_{11},\, T - t_{11})$}
+                      [{$\varepsilon$}]
+                    ]
+                  ]
+                  [{$D(T - t_{9},\, t_{10} - t_{9})$}
+                    [{$\varepsilon$}]
+                  ]
+                ]
+              ]
+              [{$D(T,\, t_{6})$}
+                [{$L(T - t_{12})$}
+                  [{$G_{t_{13} - t_{12}}$}]
+                  [{$D(T - t_{12},\, t_{13} - t_{12})$}
+                    [{$\varepsilon$}]
+                  ]
+                ]
+                [{$D(T,\, t_{6})$}
+                  [{$\varepsilon$}]
+                ]
+              ]
+            ]
+          ]
+        ]
+        [{$S$}
+          [{$\varepsilon$}]
+        ]
+      ]
+    ]
+  ]
+\end{forest}

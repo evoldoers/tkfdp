@@ -1,0 +1,77 @@
+# Run the 3 OOM-failed BAliBASE families on a 24 GB A10G GPU,
+# plus 1 control family that already succeeded locally (BB11003)
+# so we can sanity-check AWS == local before merging.
+#
+# Parameterised by env:
+#   METHOD       = tkf92_mixture | cherryml_mixture
+#   METHOD_NAME  = tkf92_K20     | cherryml_C20
+#   PARAMS_FILE  = pfam/tkf92_mixture_K20_train.npz | pfam/cherryml_mixture_C20_n5000.npz
+#
+# Usage:
+#   sky launch -c oom-fb-k20 aws/balibase_mixture_oom_fallback.yaml \
+#     --env METHOD=tkf92_mixture --env METHOD_NAME=tkf92_K20 \
+#     --env PARAMS_FILE=pfam/tkf92_mixture_K20_train.npz \
+#     --down -y
+
+resources:
+  cloud: aws
+  instance_type: g5.xlarge
+  use_spot: false               # spot quota for g5 = 0 across all
+                                # regions we tried; on-demand is $1/h
+  accelerators: A10G:1
+  disk_size: 64
+
+workdir: /home/yam/tkf-mixdom/python
+
+file_mounts:
+  /home/ubuntu/bio-datasets/data/balibase/bali3pdbm: /home/yam/bio-datasets/data/balibase/bali3pdbm
+  # ckpts (workdir syncs the rest of python/ including experiments/, tkfmixdom/, pyproject.toml)
+  ~/tkf92_mixture_K20_train.npz: /home/yam/tkf-mixdom/python/pfam/tkf92_mixture_K20_train.npz
+  ~/cherryml_mixture_C20_n5000.npz: /home/yam/tkf-mixdom/python/pfam/cherryml_mixture_C20_n5000.npz
+
+envs:
+  S3_BUCKET: tkf-mixdom-gpu-618647024028
+  RESULTS_PREFIX: balibase-runs/v12-oom-fallback
+  FAMILIES: "BB11018,BB50002,BB50006,BB11003"   # 3 OOM + 1 control
+  METHOD: tkf92_mixture
+  METHOD_NAME: tkf92_K20
+  # workdir layout (~/sky_workdir): tkfmixdom/, experiments/, etc.
+  # We pre-copy the requested ckpt into experiments/ at runtime.
+  PARAMS_BASENAME: tkf92_mixture_K20_train.npz
+  ANCHOR_FILE: experiments/tkf92_fitted_params.json
+
+setup: |
+  set -euxo pipefail
+  sudo apt-get -y update
+  sudo apt-get -y install python3-pip python3-venv
+  python3 -m venv ~/venv
+  source ~/venv/bin/activate
+  pip install -U pip wheel
+  pip install -e ~/sky_workdir
+  pip install "jax[cuda12]" awscli
+  python -c "import jax; print('JAX devices:', jax.devices())"
+
+run: |
+  set -euxo pipefail
+  source ~/venv/bin/activate
+  export JAX_ENABLE_X64=1
+  export XLA_PYTHON_CLIENT_PREALLOCATE=false
+
+  # workdir on the remote = ~/sky_workdir (matches python/ on the host)
+  cd ~/sky_workdir
+  mkdir -p pfam
+  cp ~/${PARAMS_BASENAME} pfam/${PARAMS_BASENAME}
+
+  OUT=/tmp/${METHOD_NAME}_4fams.json
+  python experiments/expected_pairwise_balibase.py \
+    --method ${METHOD} \
+    --method-name ${METHOD_NAME} \
+    --anchor ${ANCHOR_FILE} \
+    --params pfam/${PARAMS_BASENAME} \
+    --balibase-dir /home/ubuntu/bio-datasets/data/balibase/bali3pdbm \
+    --families ${FAMILIES} \
+    --fsa-sps \
+    --out ${OUT}
+
+  aws s3 cp ${OUT} s3://${S3_BUCKET}/${RESULTS_PREFIX}/${METHOD_NAME}_4fams.json
+  echo "DONE: ${METHOD_NAME} pushed to s3://${S3_BUCKET}/${RESULTS_PREFIX}/${METHOD_NAME}_4fams.json"
