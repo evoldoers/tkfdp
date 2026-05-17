@@ -1,0 +1,641 @@
+% =============================================================
+% supplement.tex
+% Supplementary material for "Exchangeably covariant sequence
+% evolution: a Dirichlet process over TKF92 domains and sites"
+% (Annabel Large & Ian Holmes, 2026).
+%
+% This file is the long technical appendix referenced by the
+% 10-page main paper at ./main.tex. It quotes large blocks of
+% the two companion manuscripts:
+%
+%   - tkf-mixdom (Holmes, "Sufficient Statistics of
+%     Insertion-Deletion Models"; Holmes & Large, "Accurate
+%     Reconstruction of Evolutionary Ancestors") via the
+%     ./tkf-mixdom git submodule;
+%   - tkf-dp (Holmes, "A TKF Model with Dirichlet-Process
+%     Coevolutionary Couplings"), curated into local
+%     appendix-E.tex / appendix-F.tex files.
+%
+% Build via:   ./build.sh --supp
+% =============================================================
+
+\documentclass[11pt]{article}
+
+\usepackage{authblk}
+
+% Force UTF-8 input handling so that body files with non-ASCII
+% cite keys (e.g. ``bouchardc\^ot\'e2013...'') parse cleanly under
+% natbib. pdfTeX needs this for citation tokenisation; LuaTeX /
+% XeTeX would not.
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+
+% ---- Geometry & graphics --------------------------------------
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage[dvipsnames,svgnames]{xcolor}
+% microtype is finicky with UTF-8 cite keys in some body files
+% (e.g. bouchardc\^ot\'e citation in tkf-mixdom). Disable here.
+% \usepackage{microtype}
+
+% Graphics paths: same as main.tex so figures in the submodule
+% resolve.
+\graphicspath{%
+  {./tkf-mixdom/python/experiments/figures/}%
+  {./figures/}%
+  {./math-paper/tkf-mixdom/python/experiments/figures/}%
+  {./math-paper/figures/}%
+}
+
+% ---- Math, fonts, theorems (must precede preamble-shared) -----
+\usepackage{amsmath,amssymb,amsthm,bm}
+\usepackage{mathtools}
+\usepackage{stmaryrd}
+
+% ---- Citation style ------------------------------------------
+% We use natbib in numerical mode here (the main paper uses the
+% same style). The shared preamble's biblatex line is overridden
+% via a stub below: we deliberately do NOT \input preamble-shared
+% directly because biblatex+natbib clash. Instead we replicate
+% the macros from preamble-shared.tex inline (see "preamble
+% replica" block below) and rely on the local refs.bib.
+\usepackage[round,numbers,sort&compress]{natbib}
+
+% ---- Algorithms ------------------------------------------------
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{multirow}
+
+% hyperref/cleveref last
+\usepackage[pdfencoding=auto,psdextra]{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black}
+\usepackage[capitalize]{cleveref}
+
+% Cross-references back to the main paper. Use xr-hyper so that
+% \ref{main:label} (or just \mainref{label}) resolves to the
+% main.aux file's label. Falls back to a text reference if
+% main.aux is unavailable.
+%
+% Provide \E *before* loading xr-hyper / reading main.aux: main.tex
+% uses \E for expectation in figure captions, and main.aux's
+% \newlabel entries quote those captions verbatim.  Without this
+% early \providecommand the xr-hyper aux-read raises "Undefined
+% control sequence" on \E[D] inside the bdi-validation caption.
+% Likewise \Pfam is used in main.tex's section heading
+% "TKF-DP K=4 on \Pfam: covariation signal..." which xr-hyper also
+% quotes verbatim from main.aux.
+% The same lines are re-issued later (around the main-paper-style
+% short-macro bloc) but \providecommand makes the late copy a
+% no-op.
+\providecommand{\E}{\mathbb{E}}
+\providecommand{\Pfam}{\textsc{Pfam}}
+\usepackage{xr-hyper}
+\IfFileExists{main.aux}{\externaldocument[main:]{main}}{}
+\providecommand\mainref[1]{\ref{main:#1}}
+
+% algpseudocode + hyperref compatibility (see preamble-shared.tex)
+\makeatletter
+\providecommand\theHALG@line{ALG.\thealgorithm.\arabic{ALG@line}}
+\makeatother
+
+% ---- Theorem environments (replicated from preamble-shared) ---
+\newtheorem{definition}{Definition}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[proposition]{Lemma}
+\newtheorem{corollary}[proposition]{Corollary}
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[section]
+\newtheorem{example}{Example}[section]
+
+% ---- Preamble macros (verbatim copy from
+% tkf-mixdom/tkf/preamble-shared.tex, minus its biblatex line)
+% so the shared body files render unchanged.
+% =============================================================
+\newcommand\expect{\mathbb{E}}
+\newcommand\Var{\mathrm{Var}}
+\newcommand\Cov{\mathrm{Cov}}
+
+\newcommand\gamclass{g}
+\newcommand\ngamclass{G}
+\newcommand\ratemult{\rho}
+
+\newcommand\xpath{\mathbb{X}}
+\newcommand\emcount{\mathcal{C}}
+\newcommand\agecorrection{\mathcal{G}}
+
+\newcommand\seq{\mathcal{S}}
+\newcommand\state{x}
+
+\newcommand\insrate{\lambda}
+\newcommand\delrate{\mu}
+\newcommand\immrate{\nu}
+
+\newcommand\ext{r}
+\newcommand\notext{\rho}
+\newcommand\notkappa{\varphi}
+\newcommand\hmmproc{{\mbox{HMM}}}
+\newcommand\nclasses{C}
+
+\newcommand\main{0}
+
+\newcommand\diag{{\mbox{diag}}}
+
+\newcommand\geomdist{{\mbox{Geometric}}}
+\newcommand\catdist{{\mbox{Categorical}}}
+\newcommand\mixture{{\mbox{Mix}}}
+\newcommand\berndist{{\mbox{Bernoulli}}}
+\newcommand\fragproc{{\mbox{Frag}}}
+\newcommand\subproc{{\mbox{Subst}}}
+\newcommand\tkflinks{{\mbox{Links}}}
+\newcommand\tkffrags{{\mbox{TKF92}}}
+
+\newcommand\dom{n}
+\newcommand\ndom{\mathcal{N}}
+\newcommand\srcdom{l}
+\newcommand\destdom{m}
+\newcommand\domdist{v}
+\newcommand\bifdom{n}
+
+\newcommand\samedom{\delta(\srcdom=\destdom)}
+\newcommand\samefrag{\delta(\srcfrag=\destfrag)}
+
+\newcommand\ltrans{\mathcal{A}}
+\newcommand\ctrans{\mathcal{B}}
+\newcommand\ltransinv{\mathcal{G}}
+\newcommand\ctransinv{\mathcal{H}}
+
+\newcommand\frag{f}
+\newcommand\nfrag{\mathcal{F}}
+\newcommand\srcfrag{f}
+\newcommand\destfrag{g}
+\newcommand\fragdist{w}
+
+\newcommand\class{c}
+\newcommand\nclass{\mathcal{C}}
+\newcommand\classdist{u}
+
+\newcommand\anctok{a}
+\newcommand\destok{b}
+\newcommand\ancordestok{a}
+\newcommand\gap{\bullet}
+
+\newcommand\alphabet{\mathcal{A}}
+\newcommand\eqm{\pi}
+\newcommand\exch{Q}
+\newcommand\symsub{S}
+\newcommand\revsub{R}
+
+\newcommand\evoltime{T}
+
+\newcommand\tkftrans{\tau}
+\newcommand\tkfwfst{\mathbb{T}}
+\newcommand\exptrans{\upsilon}
+\newcommand\transnest{\chi}
+
+\newcommand\emptyseg{z}
+\newcommand\nonemptytrans{\mathcal{T}}
+\newcommand\slicetrans{\mathcal{U}}
+\newcommand\nullpathsum{\mathcal{Z}}
+
+\newcommand\domexit{p_\mathrm{out}}
+\newcommand\domenter{p_\mathrm{in}}
+
+\newcommand\betagamma{\beta^\ast}
+
+\newcommand\fraglen{K}
+
+\newcommand\model{M}
+\newcommand\sumidx{k}
+
+\newcommand\sta{{\tt S}}
+\newcommand\mat{{\tt M}}
+\newcommand\ins{{\tt I}}
+\newcommand\del{{\tt D}}
+\newcommand\fin{{\tt E}}
+\newcommand\mnull{{\tt A}}
+\newcommand\inull{{\tt B}}
+\newcommand\dnull{{\tt C}}
+\newcommand\smide{\{\sta,\mat,\ins,\del,\fin\}}
+
+\newcommand\nonemptystates{\Psi}
+
+\newcommand\xstate{{\tt X}}
+\newcommand\ystate{{\tt Y}}
+\newcommand\zstate{{\tt Z}}
+\newcommand\ustate{{\tt U}}
+\newcommand\vstate{{\tt V}}
+
+\newcommand\waitm{{\tt V}}
+\newcommand\waitd{{\tt W}}
+
+\newcommand\emit{\Omega}
+\newcommand\silent{\mathcal{Z}}
+\newcommand\effT{\hat{T}}
+\newcommand\emprob{e}
+\newcommand\pathE{\mathcal{E}}
+\newcommand\nullcl{N^\ast}
+
+% Grammar elaboration macros
+\newcommand\WCFG{\mathcal{G}}
+\newcommand\NT{\mathcal{N}}
+\newcommand\TM{\Sigma}
+\newcommand\PR{\mathcal{P}}
+\newcommand\WF{w}
+
+% Parse-tree transducer notation
+\newcommand\PTT{\mathcal{T}}
+\newcommand\pttstate{q}
+\newcommand\pttstates{\mathcal{Q}}
+\newcommand\inputgrammar{\WCFG_{\mathrm{in}}}
+\newcommand\outputgrammar{\WCFG_{\mathrm{out}}}
+\newcommand\parsetree{\mathbf{t}}
+\newcommand\inputtree{\parsetree^{\mathrm{in}}}
+\newcommand\outputtree{\parsetree^{\mathrm{out}}}
+\newcommand\treeweight{W}
+\newcommand\treeyield{\mathrm{yield}}
+\newcommand\phylo{\mathcal{T}_{\mathrm{phy}}}
+\newcommand\branchlen{d}
+\newcommand\ancestor{x}
+\newcommand\descendant{y}
+\newcommand\nodecount{n}
+\newcommand\inside{\alpha}
+\newcommand\outside{\beta}
+\newcommand\beamwidth{W}
+
+% State name macros for the exploded MixDom Pair HMM
+\newcommand{\matdom}{\mathtt{MatDom}}
+\newcommand{\insdom}{\mathtt{InsDom}}
+\newcommand{\deldom}{\mathtt{DelDom}}
+\newcommand{\matdomend}{\mathtt{MatDomEnd}}
+\newcommand{\insdomend}{\mathtt{InsDomEnd}}
+\newcommand{\deldomend}{\mathtt{DelDomEnd}}
+\newcommand{\matdomtype}[1]{\mathtt{MatDomType}[#1]}
+\newcommand{\insdomtype}[1]{\mathtt{InsDomType}[#1]}
+\newcommand{\deldomtype}[1]{\mathtt{DelDomType}[#1]}
+\newcommand{\mkfrag}[1]{\mathtt{MatFrag}[#1]}
+\newcommand{\mkifrag}[1]{\mathtt{InsFrag}[#1]}
+\newcommand{\mkdfrag}[1]{\mathtt{DelFrag}[#1]}
+\newcommand{\ikfrag}[1]{\mathtt{IFrag}[#1]}
+\newcommand{\dkfrag}[1]{\mathtt{DFrag}[#1]}
+\newcommand{\mkfragtype}[2]{\mathtt{MatFragType}[#1,#2]}
+\newcommand{\mkifragtype}[2]{\mathtt{InsFragType}[#1,#2]}
+\newcommand{\mkdfragtype}[2]{\mathtt{DelFragType}[#1,#2]}
+\newcommand{\ikfragtype}[2]{\mathtt{IFragType}[#1,#2]}
+\newcommand{\dkfragtype}[2]{\mathtt{DFragType}[#1,#2]}
+\newcommand{\mkfragemit}[2]{\mathtt{MatEmit}[#1,#2]}
+\newcommand{\mkifragemit}[2]{\mathtt{InsEmit}[#1,#2]}
+\newcommand{\mkdfragemit}[2]{\mathtt{DelEmit}[#1,#2]}
+\newcommand{\ikfragemit}[2]{\mathtt{IEmit}[#1,#2]}
+\newcommand{\dkfragemit}[2]{\mathtt{DEmit}[#1,#2]}
+\newcommand{\mkfragend}[2]{\mathtt{MatFragEnd}[#1,#2]}
+\newcommand{\mkifragend}[2]{\mathtt{InsFragEnd}[#1,#2]}
+\newcommand{\mkdfragend}[2]{\mathtt{DelFragEnd}[#1,#2]}
+\newcommand{\ikfragend}[2]{\mathtt{IFragEnd}[#1,#2]}
+\newcommand{\dkfragend}[2]{\mathtt{DFragEnd}[#1,#2]}
+\newcommand{\matmat}{\mathtt{MM}}
+\newcommand{\matins}{\mathtt{MI}}
+\newcommand{\matdel}{\mathtt{MD}}
+\newcommand{\insins}{\mathtt{II}}
+\newcommand{\deldel}{\mathtt{DD}}
+
+% Macros used by grammar-elaboration.tex and defined in
+% recursive.tex. Use \providecommand so that the actual
+% recursive.tex \newcommand redefinitions (if recursive.tex is
+% \input below) take precedence without conflict.
+\providecommand\tok{s}
+\providecommand\ntlinks{{\tt L}}
+\providecommand\ntimm{{\tt K}}
+\providecommand\ntmor{{\tt M}}
+\providecommand\ntnew{{\tt N}}
+\providecommand\ntsur{{\tt S}}
+\providecommand\ntexp{{\tt E}}
+\providecommand\ntaln{{\tt A}}
+\providecommand\ntins{{\tt I}}
+\providecommand\ntdel{{\tt D}}
+\providecommand\ntparent{{\tt P}}
+\providecommand\ntchild{{\tt C}}
+\providecommand\ntfrag{{\tt F}}
+\providecommand\ntgen{{\tt G}}
+\providecommand\ntrem{{\tt R}}
+\providecommand\ntbegin{{\tt B}}
+\providecommand\nullability{\eta}
+\providecommand\term{{\tt T}}
+
+% Conditional-inclusion flags. We define BOTH so that shared body
+% files render their full content under either paper's conventions.
+\newcommand\INCLUDEDFROMTKF{1}
+\newcommand\MIXDOMPAPER{1}
+
+% NOTE: body-tkf91.tex cites
+% ``bouchardc\^ot\'e2013noteprobabilisticmodelsstrings'' (UTF-8
+% key). To resolve the citation, we added a bib entry to refs.bib
+% with the key written in Latin-1 bytes (\xf4 for \^o, \xe9 for
+% \'e), matching the encoding pdflatex writes to supplement.aux.
+
+\newcommand{\ind}{\mathrm{ind}}
+\newcommand{\imm}{\mathrm{imm}}
+\newcommand{\Eij}[1]{\expect\!\left[#1 \;\middle|\; X(0)=i,\, X(T)=j\right]}
+
+\newcommand{\pluseq}{\mathrel{+}=}
+\newcommand{\mixcount}{N}
+
+% ---- Supplement-paper-specific helpers ------------------------
+% Short-form objects used in the main paper that we may reference
+% from the appendices.
+\newcommand{\Q}{\bm{Q}}
+\newcommand{\Hh}{\bm{H}}
+\newcommand{\indel}{\ensuremath{(\lambda,\mu,r)}}
+\newcommand{\TKF}{\textsc{TKF}}
+\newcommand{\TKFDP}{\textsc{TKF--DP}}
+\newcommand{\MixDom}{\textsc{MixDom}}
+\newcommand{\BDI}{\textsc{BDI}}
+\providecommand{\Pfam}{\textsc{Pfam}}
+\let\E\expect
+
+% Each appendix section restarts its equation numbering.
+\renewcommand{\theequation}{\thesection.\arabic{equation}}
+\numberwithin{equation}{section}
+\numberwithin{figure}{section}
+\numberwithin{table}{section}
+
+% ---- Demoting body-file \section{} commands -----------------
+% The shared body files (body-tkf91.tex etc.) declare their own
+% \section{} blocks because they live at section level in the
+% standalone papers. In this supplement we want a six-appendix
+% scheme (one \section per supplement appendix). The simplest way
+% to demote the body's sections is via local \let so they become
+% \subsection's under our outer Appendix \section. We expose
+% \demote / \restore commands that the supplement uses to bracket
+% each \input.
+\makeatletter
+\newcommand\demote{%
+  \let\OrigSection\section
+  \let\OrigSubsection\subsection
+  \let\OrigSubsubsection\subsubsection
+  \let\section\subsection
+  \let\subsection\subsubsection
+  \let\subsubsection\paragraph
+}
+\newcommand\restore{%
+  \let\section\OrigSection
+  \let\subsection\OrigSubsection
+  \let\subsubsection\OrigSubsubsection
+}
+\makeatother
+
+% =============================================================
+% Title & author
+% =============================================================
+\title{Supplementary material for\\\emph{Insertions, deletions, and exchangeable couplings:\\a Dirichlet process over TKF92 domains and sites}}
+\author{Annabel Large}
+\author{Ian Holmes}
+\affil{Department of Bioengineering, University of California, Berkeley\\
+       \texttt{\{annabel\_large, ihh\}@berkeley.edu}}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+This supplement collects the long technical derivations referenced
+by the main paper. It is organised into five appendices that mirror
+the conceptual ladder of the main text. Appendix~\ref{app:bdi}
+develops the finite-state CTMC and the linear birth--death--immigration
+process, derives the closed-form bridge-expectation and Fisher-score
+sufficient statistics for TKF91 and TKF92, resolves the L'H\^opital
+singularity at $\insrate{}={}\delrate$, and discusses the
+relationship between TKF92 and the latent-boundary-free General
+Geometric Indel (GGI) model. Appendix~\ref{app:em} collects the
+closed-form substitution M-steps for TKF91 / TKF92 / \MixDom\ in
+their many GTR specialisations, the stochastic-variational
+Baum--Welch loop with its convergence theorem and linearised
+analysis at stationarity, Maraschino (the TKF92 cherry-distilled
+generalisation of CherryML) and its tree-level inference algorithms
+(FSA, BeamASR, VarAnc, svi-VarAnc), the mixture-of-trees
+variational ancestral presence/absence inference, and the
+structural bias of the BP cumulant under a column-factorised
+variational field. Appendix~\ref{app:recursive} develops the
+recursive TKF family: \MixDom, the
+hierarchical-mixture-of-domains generalisation of TKF92, with its
+exact closed-form M-step via six-step chain restoration through a
+fully exploded null-state model; the order-1 Maraschino adjacency
+distillation; algebraic distillation of \MixDom; the
+\MixDom-specific SVI-BW convergence considerations; the tree-level
+VEM and ancestral-reconstruction algorithms; the generalised
+phylo-HMM; the labeled-\MixDom\ Singlet and WFST; and the
+recursive-grammar-elaboration rules together with worked recursive
+examples (L-TKF, TKFST, TKFStack, TKF-Genome).
+Appendix~\ref{app:tkfdp} develops the TKF-DP generative model, the
+class-level path-measure variational likelihood with pairwise
+bridge expectations, the time-indexed gravestone-augmented pair SCFG,
+the SVI inference loop, and the pairwise alignment postprocessing
+landscape. Appendix~\ref{app:phmm} develops the infinite Pair HMM
+as the principled fixed point and the Gibbs+MH+replica-exchange
+MCMC sampler that draws from it.
+\end{abstract}
+
+\tableofcontents
+\clearpage
+
+% =============================================================
+% Notation table
+% =============================================================
+\section*{Common notation}
+\addcontentsline{toc}{section}{Common notation}
+
+\noindent Several important symbols and their cross-appendix
+conventions are collected below.
+
+\begin{center}
+\small
+\begin{tabular}{lll}
+\toprule
+\textbf{Symbol} & \textbf{Meaning} & \textbf{First defined} \\
+\midrule
+$\insrate, \delrate$ & TKF insertion / deletion rates (per link) & \S\ref{app:bdi} \\
+$\ext$ & TKF92 fragment-extension probability & \S\ref{app:bdi} \\
+$\alphabet$ & residue alphabet ($A = |\alphabet| = 20$ for proteins) & \S\ref{app:bdi} \\
+$\eqm, \exch, \symsub$ & GTR stationary, asymmetric, exchangeability matrices & \S\ref{app:bdi} \\
+$\revsub$ & substitution rate matrix (generator) & \S\ref{app:bdi} \\
+$\dom, \frag, \class$ & domain, fragment, and substitution-class indices (\MixDom) & \S\ref{app:recursive} \\
+$\eta_s$ & per-site gamma rate multiplier & \S\ref{app:tkfdp} \\
+$z_s, c_s, h_{cc'}$ & key, site-class, Potts-atom indices (TKF-DP) & \S\ref{app:tkfdp} \\
+$\alpha_z, \alpha_c, \alpha_H$ & key/class/atom Dirichlet-process concentrations & \S\ref{app:tkfdp} \\
+$\Q, \Hh$ & generator and Potts coupling tensor & \S\ref{app:tkfdp} \\
+$\tkftrans$ & TKF91 Pair HMM transition matrix & \S\ref{app:bdi} \\
+$\exptrans$ & exploded $7{\times}7$ \MixDom\ top-level transitions with null states & \S\ref{app:recursive} \\
+$\nonemptytrans$ & effective $5{\times}5$ \MixDom\ top-level matrix (nulls summed out) & \S\ref{app:recursive} \\
+$\transnest$ & final nested \MixDom\ Pair HMM transition matrix & \S\ref{app:recursive} \\
+$N_a, N_g$ & alive / gravestone counts (TKF-DP) & \S\ref{app:tkfdp} \\
+$F_0, F_1, F_2$ & TKF92 Pair HMM 0/1/2-cell marginal partition functions & \S\ref{app:phmm} \\
+$\pi_{\!M}$ & CRP partition of Match cells (infinite Pair HMM) & \S\ref{app:phmm} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\appendix
+
+% =============================================================
+\section{BDI and TKF foundations}
+\label{app:bdi}
+% =============================================================
+
+This appendix builds the foundations on which the rest of the
+supplement rests. We develop the finite-state continuous-time
+Markov chain (CTMC) sufficient statistics; the linear
+birth--death--immigration (BDI) process and its
+endpoint-conditioned sufficient statistics via the Fisher score
+identity; the TKF91 model as a factorisation of these; its
+finite-state machine representations; the TKF92 generalisation;
+the explicit $6{\times}6$ WFST derivation by Pair-HMM-over-Singlet
+division; the L'H\^opital limits at
+$\insrate{=}\delrate$ that close the $0/0$ singularity in the
+score identity; and a discussion of how the latent-boundary TKF92
+model relates to the latent-boundary-free General Geometric Indel
+(GGI) model via moment matching.
+
+% The SVI-BW subsection has been factored out of body-tkf91.tex into
+% its own file (svb-tkf91.tex), so it only appears once in this
+% supplement -- under Appendix B.2 below.
+\demote
+\input{tkf-mixdom/tkf/body-tkf91.tex}
+\input{tkf-mixdom/tkf/body-tkf92.tex}
+\input{tkf-mixdom/tkf/tkf92-wfst-derivation.tex}
+\input{tkf-mixdom/tkf/lhopital-limits.tex}
+\input{tkf-mixdom/tkf/score-derivatives.tex}
+\input{appendix-ggi.tex}
+\restore
+
+% =============================================================
+\section{EM, composite likelihoods, and variational inference}
+\label{app:em}
+% =============================================================
+
+Building on Appendix~\ref{app:bdi}, this appendix develops the
+M-step and variational-inference machinery for TKF91 / TKF92 /
+\MixDom\ at full generality. First, closed-form GTR substitution
+M-steps in their many specialisations (JC69, K80, F81, HKY85, GTR,
+GY94, plus rate-rescaling, tied-equilibria, and mixture-of-GTR
+variants); then the stochastic variational Baum--Welch (SVI-BW)
+loop with its convergence theorem (ELBO derivation,
+natural-gradient updates, minibatch variance bounds), the
+linearised analysis at stationarity, Maraschino as the cherry-count
+distillation of TKF92, the tree-level inference algorithms it
+composes with (FSA, BeamASR, VarAnc, svi-VarAnc), the
+mixture-of-trees variational ancestral presence/absence inference,
+and the structural-bias analysis of the BP cumulant under a
+column-factorised variational field.
+
+\demote
+\input{tkf-mixdom/tkf/substitution-mstep.tex}
+\input{tkf-mixdom/tkf/svb-tkf91.tex}
+\input{tkf-mixdom/tkf/svb-convergence.tex}
+\input{tkf-mixdom/tkf/body-maraschino-main.tex}
+\input{tkf-mixdom/tkf/body-tkf-inference.tex}
+\input{tkf-mixdom/tkf/varanc-presence.tex}
+\input{tkf-mixdom/tkf/varanc-bias-appendix.tex}
+\restore
+
+% =============================================================
+\section{Recursive TKF}
+\label{app:recursive}
+% =============================================================
+
+\MixDom\ adds two levels of nested mixture structure on top of
+TKF92: a top-level TKF91 process governing domain births and
+deaths, and per-domain TKF92 processes governing fragments
+within. Each fragment also carries a substitution-class index.
+The exact Baum--Welch M-step proceeds via a six-step
+chain-restoration identity through a fully exploded null-state
+model. The same nesting pattern --- a parent BDI / TKF process
+emitting child fragments that themselves carry latent class /
+domain / structure indices --- supports a family of recursive TKF
+models that this appendix collects: \MixDom, its order-1 Maraschino
+adjacency distillation, the algebraic full-Woodbury distillation,
+the \MixDom-specific SVI-BW convergence theory, the tree-level VEM
+and ancestral-reconstruction algorithms, the generalised
+phylo-HMM, the labeled-\MixDom\ Singlet and WFST, the formal
+recursive-grammar-elaboration rules, and four worked recursive
+examples (L-TKF, TKFST, TKFStack, TKF-Genome).
+
+\demote
+\input{tkf-mixdom/tkf/body-mixdom.tex}
+\input{tkf-mixdom/tkf/body-mixdom-inference.tex}
+\input{tkf-mixdom/tkf/mixdom-algorithms.tex}
+\input{tkf-mixdom/tkf/exploded-mixdom.tex}
+% Rename the maraschino.tex top-level section
+% (``Maraschino Cherries: Distilled Pairwise Alignments'') to
+% ``Order-1 Maraschino: Distilled Adjacency Frequencies'' for this
+% supplement, since the source file lives in a read-only submodule.
+% We do this by emitting the renamed heading ourselves (we emit a
+% \section, which under \demote is aliased to \subsection -- thus
+% rendering as a C.x subsection) and turning the first \section{...}
+% of the inputted file into a no-op.
+% RENAMED FROM: \section{Maraschino Cherries: Distilled Pairwise Alignments}
+\section{Order-1 Maraschino: Distilled Adjacency Frequencies}
+\label{sec:order1-maraschino-renamed}
+{%
+  \let\OrigSectionDemoted\section
+  \renewcommand{\section}[1]{}%
+  \input{tkf-mixdom/tkf/maraschino.tex}%
+  \let\section\OrigSectionDemoted
+}
+\input{tkf-mixdom/tkf/algebraic-distillation.tex}
+\input{tkf-mixdom/tkf/svb-convergence-mixdom.tex}
+\input{tkf-mixdom/tkf/varanc-vbem.tex}
+\input{tkf-mixdom/tkf/varanc-presence-mixdom.tex}
+\input{tkf-mixdom/tkf/partition-recon.tex}
+\input{tkf-mixdom/tkf/mixdom-wfst.tex}
+\input{tkf-mixdom/tkf/grammar-elaboration.tex}
+% recursive.tex (1230 lines) is the long recursive-grammar
+% appendix from the TKF paper. It \newcommand's roughly 20 macros
+% (\tok, \ntlinks, ... ) some of which collide with definitions
+% in our preamble. We \let-save and \let-restore them around the
+% \input so neither side overwrites the other permanently.
+\makeatletter
+\let\OrigTok\tok \let\OrigNtlinks\ntlinks \let\OrigNtimm\ntimm
+\let\OrigNtmor\ntmor \let\OrigNtnew\ntnew \let\OrigNtsur\ntsur
+\let\OrigNtexp\ntexp \let\OrigNtaln\ntaln \let\OrigNtins\ntins
+\let\OrigNtdel\ntdel \let\OrigNtparent\ntparent
+\let\OrigNtchild\ntchild \let\OrigNtfrag\ntfrag
+\let\OrigNtgen\ntgen \let\OrigNtrem\ntrem
+\let\OrigNtbegin\ntbegin \let\OrigNullability\nullability
+\let\OrigTerm\term
+\let\tok\@undefined \let\ntlinks\@undefined
+\let\ntimm\@undefined \let\ntmor\@undefined \let\ntnew\@undefined
+\let\ntsur\@undefined \let\ntexp\@undefined \let\ntaln\@undefined
+\let\ntins\@undefined \let\ntdel\@undefined
+\let\ntparent\@undefined \let\ntchild\@undefined
+\let\ntfrag\@undefined \let\ntgen\@undefined \let\ntrem\@undefined
+\let\ntbegin\@undefined \let\nullability\@undefined
+\let\term\@undefined
+\makeatother
+\input{tkf-mixdom/tkf/recursive.tex}
+\restore
+
+% =============================================================
+\section{TKF-DP: Dirichlet-process Potts coupling}
+\label{app:tkfdp}
+% =============================================================
+
+\input{appendix-tkfdp.tex}
+
+% =============================================================
+\section{The infinite Pair HMM and its MCMC sampler}
+\label{app:phmm}
+% =============================================================
+
+\input{appendix-infinite-phmm.tex}
+
+% =============================================================
+% Bibliography
+% =============================================================
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\end{document}

@@ -1,0 +1,507 @@
+% =============================================================
+% Appendix F: The infinite Pair HMM and its MCMC sampler
+% Source: ~/tkf-dp/main.tex Section 7 (sec:f2-scfg + sec:aug-phmm +
+% sec:infinite-hmm), quoted near-verbatim, plus the corresponding
+% algorithmic spec in ~/tkf-dp/analysis/mcmc_infinite_phmm.md.
+% =============================================================
+
+The Pair HMM postprocessing methods of \S\ref{sec:postprocessing}
+are progressively faithful approximations to a single underlying
+object: the alignment-and-partition posterior on
+$\pi(A, \pi_{\!M} \mid X, Y)$, where $A$ is the TKF92 alignment and
+$\pi_{\!M}$ is a Chinese-restaurant-process partition of its Match
+cells into singletons (block of size 1, contributing the standard
+per-site CTMC factor) and pairs (block of size 2, contributing the
+joint Potts CTMC factor). This appendix develops the three-factor
+factorisation $\pi_{\TKF92} \cdot \pi_{\mathrm{CRP}} \cdot
+\prod_b P_{\mathrm{block}}$ in full; describes the exact $F_2$-SCFG
+inside--outside formulation that achieves it at $O(L^4)$;
+re-encodes the same content as a memory-augmented Pair HMM at
+$O(L^2 A^2)$; and develops the Gibbs+MH+replica-exchange MCMC
+sampler that draws from the unbounded-edge limit at amortised
+$O(L^3)$ per sweep. The conceptual hierarchy at the end of the
+appendix lifts this construction to the full multi-branch
+\emph{phylogenetic} SCFG, the natural fixed point of the entire
+ladder of approximations.
+
+\subsection{Exact 0-or-1-edge marginal posteriors via Pair-SCFG inside-outside}
+\label{sec:f2-scfg}
+
+The deprecated mean-field correction
+(remark~\ref{rem:deprecated-mean-field} of
+Appendix~\ref{app:tkfdp}) and the coupled-pair greedy annealer of
+\S\ref{sec:coupled-annealing} are two routes to the same
+intractable posterior of
+equation~\ref{eq:tkfdp-joint-marginal}; the present subsection
+derives an exact dynamic-programming alternative under the hard
+restriction that the coupling partition $E$ contains zero or one
+edge. The result is a per-residue-pair posterior $Q'_{ij}$ that
+consumes the same downstream FSA assembler as the baseline, with
+the coupling evidence absorbed exactly into the posterior rather
+than fed in via a per-pair correction or via a custom annealer
+move set.
+
+\subsubsection*{Three pair-HMM marginal moments}
+
+Under the no-coevolution baseline TKF92 Pair HMM with the
+class-mixture single-site emissions of Appendix~\ref{app:tkfdp},
+let $\pi(X, Y, A)$ denote the joint probability of an alignment
+$A$ between sequences $X$ and $Y$. Define
+\begin{align}
+F_0(X, Y) \;&\equiv\; \sum_A \pi(X, Y, A), \label{eq:F0} \\
+F_1(X, Y; i, j) \;&\equiv\; \sum_{A \,:\, X_i \sim_A Y_j} \pi(X, Y, A), \label{eq:F1} \\
+F_2(X, Y; i, j; k, l) \;&\equiv\; \sum_{A \,:\, X_i \sim_A Y_j \,\wedge\, X_k \sim_A Y_l} \pi(X, Y, A), \label{eq:F2}
+\end{align}
+where $X_i \sim_A Y_j$ denotes that the alignment $A$ pairs residue
+$X_i$ with $Y_j$ in a Match emission. Computationally, $F_0$ is a
+Forward in $O(L^2)$, $F_1$ is a Forward--Backward in $O(L^2)$, and
+$F_2$ is the Inside--Outside table of a non-bifurcating Pair SCFG
+(or equivalently a doubled Forward--Backward) in $O(L^4)$ time and
+memory. The conventional Pair-HMM match-state posterior is
+$Q_{ij} \equiv F_1(i, j) / F_0$.
+
+The objects $F_1$ and $F_2$ stand in the relation that gradients
+and Hessians do to a partition function: $F_1(i, j) / F_0$ is the
+marginal probability that $(X_i, Y_j)$ is paired and
+$F_2(i, j; k, l) / F_0$ is the marginal joint probability that
+both $(X_i, Y_j)$ and $(X_k, Y_l)$ are paired, with the
+no-coevolution model serving as the unperturbed reference point.
+
+\subsubsection*{The 0-or-1-edge Pair SCFG}
+
+Let $M(i, j; k, l; t) \equiv M((X_i, X_k), (Y_j, Y_l); t)$ denote
+the four-residue Potts coupling boost of
+equation~\ref{eq:M-boost} of Appendix~\ref{app:tkfdp}, evaluated
+at the observed residues $(X_i, Y_j, X_k, Y_l)$ and the inferred
+branch length $t$. Define the (unnormalised) Pair-SCFG generating
+function
+\begin{equation}
+\label{eq:scfg-grammar}
+S \;\to\; S_0 \,\,\big|\,\, S_1, \qquad \text{with multiplicative weights $1$ and $\varepsilon = 1 / \alpha_z$,}
+\end{equation}
+where the two non-terminals expand as
+\begin{align*}
+S_0 \;&\to\; \text{TKF92 Pair HMM with zero coupled column-pairs (the baseline)}, \\
+S_1 \;&\to\; \text{TKF92 Pair HMM with exactly one coupled column-pair}.
+\end{align*}
+The 1-edge nonterminal's parse picks one ordered column-pair
+$(i, j; k, l)$ with $i < k$ as the coupled pair and replaces the
+product of independent single-site Match emissions at columns
+$(i, j)$ and $(k, l)$ with the joint pair-emission
+$P_{\mathrm{joint}}((X_i, X_k) \to (Y_j, Y_l); t, H)$, equivalently
+the product of independent emissions multiplied by
+$M(i, j; k, l; t)$. The partition function of the grammar is
+\begin{equation}
+\label{eq:exact-01}
+L_{\mathrm{exact}}(X, Y) \;=\; F_0(X, Y) \,+\, \varepsilon \sum_{(i, j; k, l), \,\, i < k} F_2(X, Y; i, j; k, l) \cdot M(i, j; k, l; t).
+\end{equation}
+The first term is the no-coupling marginal likelihood; the second
+is the marginal contribution of all alignments that contain
+exactly one coupled column-pair, summed over all candidate
+locations $(i, j; k, l)$ for that pair. The $\varepsilon$ prefactor
+is the per-pair partner prior under the size-$\{1, 2\}$ Ewens
+partition with concentration $\alpha_z$; the assumption restricting
+to at most one edge per alignment is a hard-truncation of the
+size-$\{1, 2\}$ partition that retains the leading-order correction
+in $\varepsilon$.
+
+\subsubsection*{The exact match posterior}
+
+Inside--Outside on the grammar~\eqref{eq:scfg-grammar} yields the
+marginal probability that residue $X_i$ is aligned to $Y_j$ in the
+data:
+\begin{equation}
+\label{eq:exact-Q}
+Q'_{ij} \;=\; \frac{F_1(X, Y; i, j) \,+\, \varepsilon \sum_{(k, l) \,:\, k \neq i} F_2(X, Y; i, j; k, l) \cdot M(i, j; k, l; t)}{L_{\mathrm{exact}}(X, Y)}.
+\end{equation}
+The numerator collects all alignment-paths through the SCFG that
+touch $(i, j)$ as a Match: the first term covers $S_0$ paths (no
+coupled pair touches $(i, j)$), the second term covers $S_1$ paths
+in which $(i, j)$ is part of the (unique) coupled pair, summed
+over the choice of partner column $(k, l)$. Both summands include
+the boost factor $M$ at exactly the right place. The denominator
+is the partition function~\eqref{eq:exact-01}.
+
+In the limit $\varepsilon \to 0$ (or $H = 0$ so $M \equiv 1$
+everywhere), $Q'_{ij}$ collapses to $F_1(i, j) / F_0 = Q_{ij}$, the
+no-coupling baseline, as required.
+
+\subsubsection*{Cost and practical considerations}
+
+The bottleneck of the explicit $F_2$ tensor encoding is the
+$O(L^4)$ time and memory required to materialise $F_2$ itself:
+$F_2$ has $\binom{L}{2}^2 \approx L^4 / 4$ free entries, which at
+$L = 200$ occupies a few GB in single precision. Longer sequences
+require either (a) prefix/suffix chunking on the second-anchor
+axis $(k, l)$ to keep memory bounded, or (b) candidate pruning
+that drops $(i, j)$ or $(k, l)$ pairs with $F_1(\cdot) < q_{\min}$,
+reducing the candidate set from $O(L^4)$ to $O(L^2)$ in practice.
+The reference implementation lives in \texttt{src/tkfdp/f2\_scfg.py};
+in the current codebase it is retained primarily as a
+cross-validation reference for the more efficient memory-augmented
+Pair HMM described in the next subsection (which agrees with
+$F_2$-SCFG to machine precision and runs at $O(L^2 A^2)$).
+
+The available pathways to a coupled-FSA-consumable per-residue
+posterior, in order of fidelity:
+
+\begin{center}
+\begin{tabular}{lll}
+\textbf{Pathway} & \textbf{Cost} & \textbf{Approximation} \\
+\hline
+Mean-field pre-correction (deprecated; rem.~\ref{rem:deprecated-mean-field}) & $O(L^2 K_c^2 A^2)$ & First-order in $\varepsilon$ \\
+Coupled-pair greedy annealer (\S\ref{sec:coupled-annealing}) & $O(L^3)$ & Greedy commit ordering \\
+$F_2$-SCFG explicit enumeration & $O(L^4)$ & 0-or-1-edge truncation, otherwise exact \\
+Aug-PHMM 1-edge (\S\ref{sec:aug-phmm}) & $O(L^2 A^2)$ & 0-or-1-edge truncation, otherwise exact \\
+Aug-PHMM 2-edge (\S\ref{sec:aug-phmm}) & $O(L^2 A^4)$ & 0-or-1-or-2-edge truncation, otherwise exact \\
+Infinite Pair HMM MCMC (\S\ref{sec:infinite-hmm}) & $O(L^4) + O(L^3) \cdot N_{\mathrm{sweep}}$ & Stochastic; converges to exact \\
+\end{tabular}
+\end{center}
+
+The bounded-edge approximations capture progressively more of the
+coupling correction at progressively higher cost; the infinite Pair
+HMM MCMC is the principled limit, exact in expectation up to MCMC
+sampling error. For families dominated by a single strong
+coevolutionary edge per column, the 1-edge aug-PHMM at $O(L^2 A^2)$
+is empirically adequate; for families with multiple competing
+partners per column, the 2-edge aug-PHMM (or the MCMC sampler) is
+necessary.
+
+\subsection{Memory-augmented Pair HMM: the same content at $O(L^2 A^2)$}
+\label{sec:aug-phmm}
+
+The $F_2$-SCFG of equations~\ref{eq:scfg-grammar}--\ref{eq:exact-Q}
+can be re-encoded as a Pair HMM whose latent state is augmented
+with a small \emph{tag memory} of in-progress coupled-edge
+endpoints. For the 0-or-1-edge case the tag set has
+$|\mathcal{T}| = 1 + A^2 + 1$ values: a sentinel \texttt{no\_edge}
+state, $A^2$ states $(a, b)$ recording that a left endpoint with
+observed amino acids $(a, b)$ is awaiting its right partner, and a
+terminal \texttt{done} state recording that a coupled pair has been
+consumed. At any Match cell $(i, j)$ the HMM may either (a) carry
+the tag forward unchanged, (b) transition
+$\texttt{no\_edge} \to (X_i, Y_j)$ with weight $\varepsilon$ (spawn
+a left endpoint), or (c) transition $(a, b) \to \texttt{done}$ with
+weight $M(\cdot,\cdot;X_i,Y_j;t)$ summed over the recorded $(a, b)$
+(close the pair). At all non-Match states the tag is preserved
+verbatim. The augmented Forward partition function equals
+$L_{\mathrm{exact}}$ of equation~\ref{eq:exact-01}, and the
+marginal posterior at Match-state cell $(i, j)$, summed over tag
+values, equals $Q'_{ij}$ of equation~\ref{eq:exact-Q}. Cost is
+$O(L^2 \cdot 5 \cdot |\mathcal{T}|) = O(L^2 A^2)$ time and memory:
+a factor $L^2 / A^2 \approx 100$ speedup over the explicit $F_2$
+tensor at typical sequence lengths, with no loss of fidelity.
+Implementation lives in \texttt{src/tkfdp/aug\_phmm.py};
+cross-validation against the $O(L^4)$ $F_2$-SCFG reference
+confirms agreement to machine precision (max
+$|Q'_{ij} - Q'^{\mathrm{SCFG}}_{ij}| \approx 10^{-14}$ on tested
+pairs).
+
+The same construction generalises to allow up to $k$ coupled
+column-pairs per alignment by enlarging the tag set to record
+(i) the multiset of in-flight left endpoints (size up to $k$),
+(ii) the number of resolved pairs (in $\{0, 1, \ldots, k\}$), and
+(iii) optionally the in-flight endpoints alongside the resolved-pair
+counter. For $k = 2$ the tag set has
+$|\mathcal{T}_2| = 1 + A^2 + A^2(A^2+1)/2 + A^2 + 1 \approx 81{,}000$
+values for $A = 20$: a sentinel \texttt{no\_edge}, $A^2$ singleton
+states (one in-flight, none resolved), an unordered-multiset pair
+state of size $A^2(A^2+1)/2$ (two in-flight, none resolved;
+same-element multisets are valid distinct states), $A^2$
+closed-singleton states (one resolved, one in-flight), and a
+terminal \texttt{closed\_done}. The match-cell transitions add a
+spawn from singleton$\to$pair with weight $\varepsilon$ (multiset
+construction), and three closure transitions:
+pair$\to$closed-singleton with weight $M(\cdot;X_i,Y_j;t)$ over the
+closed multiset element, singleton$\to$closed-done with weight $M$,
+and closed-singleton$\to$closed-done with weight $M$. Cost is
+$O(L^2 \cdot 5 \cdot |\mathcal{T}_2|) = O(L^2 A^4)$ time and memory.
+
+\subsection{The principled formulation: three-factor model and MCMC}
+\label{sec:infinite-hmm}
+
+The bounded-edge truncations (0-or-1-edge in \S\ref{sec:f2-scfg};
+0-or-1-or-2-edge as a natural extension) are dynamic-programming
+approximations to a more principled underlying model whose joint
+posterior factorises cleanly into three independent ingredients:
+the alignment path $A$ under the TKF92 Pair HMM, a partition
+$\pi_{\!M}$ of its Match cells under a Chinese Restaurant Process
+(CRP) prior, and the per-block substitution likelihood under the
+substitution CTMC:
+\begin{equation}
+\label{eq:infinite-hmm-factorisation}
+\pi(A, \pi_{\!M} \mid X, Y) \;\propto\; \pi_{\mathrm{TKF92}}(A \mid X, Y) \;\cdot\; \pi_{\mathrm{CRP}}(\pi_{\!M} \mid \alpha_z, |\mathrm{Match}(A)|) \;\cdot\; \prod_{b \,\in\, \pi_{\!M}} P_{\mathrm{block}}(b \mid t, H).
+\end{equation}
+Blocks of size~1 (uninvolved Match cells) contribute the standard
+single-site CTMC factor $P_{\mathrm{singlet}}$ of
+equation~\ref{eq:p-singlet} of Appendix~\ref{app:tkfdp}; blocks
+of size~2 (coupled-edge endpoints) contribute the joint Potts
+CTMC factor $P_{\mathrm{doublet}}$ of equation~\ref{eq:p-doublet}.
+The CRP
+prior with concentration $\alpha_z$ on a partition of
+$N = |\mathrm{Match}(A)|$ Match cells into $K$ blocks of sizes
+$\{n_b\}_{b=1}^K$ is the canonical Ewens partition
+prior~\citep{ewens1972,pitmanyor1997}
+\begin{equation}
+\label{eq:crp-prior}
+\pi_{\mathrm{CRP}}(\pi_{\!M} \mid \alpha_z, N) \;=\; \frac{\alpha_z^K \, \prod_{b=1}^K (n_b - 1)!}{\alpha_z (\alpha_z + 1) \cdots (\alpha_z + N - 1)};
+\end{equation}
+large $\alpha_z$ favours many small blocks (mostly singletons, few
+coupled pairs). In practice we restrict to blocks of size at
+most~2: blocks of size $\geq 3$ would correspond to triangular
+cliques whose marginal mass is suppressed by factors of
+$1/\alpha_z$ at high concentration. We call
+\eqref{eq:infinite-hmm-factorisation} the \emph{infinite Pair HMM}
+in the sense that the number of coupled edges per alignment is not
+capped by the prior --- in contrast to the bounded-edge
+dynamic-programming methods of \S\ref{sec:aug-phmm}.
+
+The original \emph{infinite Hidden Markov Model} of Beal,
+Ghahramani \& Rasmussen~\citep{bealghahramani2002} and the
+HDP-HMM of Teh, Jordan, Beal \&
+Blei~\citep{tehjordan2006} provide the broader Bayesian-nonparametric
+framework in which equation~\ref{eq:infinite-hmm-factorisation}
+sits.
+
+\subsubsection*{MCMC sampler from the infinite Pair HMM}
+
+The factorisation \eqref{eq:infinite-hmm-factorisation} admits an
+efficient Markov-chain Monte Carlo sampler that scales as $O(L^4)$
+for one-time setup followed by $O(L^3)$ amortised cost across many
+sweeps. We give the setup phase first, then the three move types
+that compose the sweep.
+
+\paragraph{Target distribution.} The sampler operates on the joint
+state $(A, E)$ where $A$ is a TKF92 Pair HMM alignment and $E$ is
+a set of unordered Match-cell-pair edges. The unnormalised target
+distribution is
+\begin{equation}
+\label{eq:mcmc-target}
+\pi(A, E \mid X, Y) \;\propto\; P_{\mathrm{baseline}}(A \mid X, Y) \cdot \frac{\alpha_z^{|E|}}{\prod_{m=1}^{N_M(A)} (m - 1 + \alpha_z)} \cdot \prod_{e \in E} M(e \mid t),
+\end{equation}
+where $N_M(A)$ is the number of Match cells in $A$ and
+$M(e \mid t)$ is the four-residue Potts boost at edge $e$. The
+combinatorial prior is the canonical Ewens distribution restricted
+to blocks of size $\leq 2$.
+
+\paragraph{Setup phase.} The setup phase precomputes (a) the
+partial-Forward tensor $F^{\mathrm{partial}}[i, j; k, l]$ giving
+the baseline TKF92 Pair HMM probability of any alignment passing
+through Match at both anchor cells $(i, j)$ and $(k, l)$ (the
+same $O(L^4)$ object enumerated by the $F_2$ inside--outside
+table of \S\ref{sec:f2-scfg}), and (b) the four-residue Potts
+boost tensor $M$ at the observed amino acids over all anchor
+quadruples. Both are stored once per $(X, Y)$ pair and reused
+across all sweeps and chains.
+
+\paragraph{The three MCMC moves.} The MCMC kernel composes three
+move types:
+
+\begin{enumerate}
+\item \textbf{Segment-resample move (MH).} Pick a contiguous
+  fragment of the current alignment $A$ bounded by two anchor
+  Match cells $a_L < a_R$ (or by the alignment endpoints). Propose
+  $A^{\mathrm{new}}$ by sampling the fragment from immediately
+  after $a_L$ to immediately before $a_R$ by stochastic traceback
+  on the segment-conditional Forward partition function
+  $F^{\mathrm{partial}}_{\mathrm{segment}}[a_L; a_R]$ (Gibbs sample
+  of the path conditional on the bounding anchors and the
+  unchanged flanking alignment). Existing edges with endpoints in
+  the resampled region are discarded; their orphaned partners
+  outside the region become singletons in the partition. The
+  proposal is exact under $\pi_{\mathrm{TKF92}}$, so the
+  alignment-likelihood factor of \eqref{eq:mcmc-target} cancels in
+  the Hastings ratio, leaving only the CRP and boost factors.
+
+\item \textbf{CRP add-edge move (MH).} Pick a Match cell of $A$
+  that is currently a singleton in $\pi_{\!M}$. Propose a partner
+  Match cell from a proposal distribution
+  $q_{\mathrm{add}}(\cdot \mid \text{singleton position})$ (the
+  natural choice weights candidate partners by their boost
+  magnitude $|M - 1|$). Insert the new edge into $E$. The Hastings
+  ratio combines the CRP prior ratio
+  $\alpha_z / (m - 1 + \alpha_z)$, the boost factor $M(e \mid t)$,
+  and the reverse-proposal ratio (which is symmetric for a uniform
+  remove-edge proposal of the same edge cardinality).
+
+\item \textbf{CRP remove-edge move (MH).} Pick an existing edge in
+  $E$ uniformly. Remove it; both endpoints become singletons. The
+  Hastings ratio is the reciprocal of the add-edge ratio.
+\end{enumerate}
+
+\paragraph{Replica exchange.} Parallel-tempering replica exchange
+over a ladder of $\alpha_z$ values (corresponding to varying
+coupling strengths) ensures global mixing across the
+multimodal posterior. Adjacent replicas swap states with the usual
+Metropolis acceptance ratio for the temperature-pair exchange.
+
+\paragraph{Cost.} The setup phase is $O(L^4)$ one-time per
+sequence pair. Each MCMC sweep does $O(1)$ inter-edge-anchor
+segment resamples; each segment resample is an $O(L_{\rm seg})$
+stochastic traceback through the cached partial-Forward tensor,
+giving an amortised $O(L)$ per-sweep cost. Aggregated
+per-cell match indicators across post-burn-in samples yield a
+stochastic estimate of the per-residue posterior $Q'_{ij}$ that
+the FSA assembler consumes in place of the bounded-edge analytic
+estimate. The block move reduces to a pure Gibbs ``segment
+between adjacent edge anchors'' resample whenever $a_L$ and $a_R$
+are adjacent in the current edge-anchor list.
+
+\subsubsection*{Algorithmic detail}
+
+\begin{algorithm}[H]
+\caption{One MCMC sweep on the infinite Pair HMM}
+\label{alg:mcmc-sweep}
+\begin{algorithmic}[1]
+\Require Current state $(A, E)$, partial-Forward tensor
+  $F^{\mathrm{partial}}$, boost tensor $M$, concentration
+  $\alpha_z$
+\Ensure New state $(A', E')$
+\State Pick $K_{\mathrm{seg}}$ segment-resample positions
+  (e.g.\ $K_{\mathrm{seg}} = 8$, distributed by alignment length)
+\For{each segment $[a_L, a_R]$}
+  \State $A_{\mathrm{seg}}^{\mathrm{new}} \gets$ stochastic
+    traceback of $F^{\mathrm{partial}}_{\mathrm{segment}}[a_L; a_R]$
+  \State Discard edges in $E$ with at least one endpoint in
+    $[a_L, a_R]$ (orphaned partners become singletons)
+  \State $\rho \gets$ MH ratio combining CRP and boost factors
+    (alignment factor cancels by construction of the proposal)
+  \If{$u \sim \mathrm{Uniform}(0, 1) < \rho$}
+    \State $A \gets A$ with $[a_L, a_R]$ replaced by
+      $A_{\mathrm{seg}}^{\mathrm{new}}$
+    \State $E \gets E$ with orphaned edges removed
+  \EndIf
+\EndFor
+\State Pick $K_{\mathrm{add}}$ add-edge candidates and
+  $K_{\mathrm{rem}}$ remove-edge candidates (e.g.\
+  $K_{\mathrm{add}} = 4 |E|$, $K_{\mathrm{rem}} = |E|$)
+\For{each candidate}
+  \State Propose under the appropriate move kernel
+  \State Compute MH ratio (CRP $\times$ boost for add;
+    reciprocal for remove)
+  \State Accept / reject
+\EndFor
+\State Periodically: attempt replica-exchange swap with adjacent
+  $\alpha_z$ rung
+\State \Return $(A, E)$
+\end{algorithmic}
+\end{algorithm}
+
+\noindent The exact form of the segment-resample MH ratio depends
+on the edge-handling convention. Under the simplest convention
+(``Strategy~S-1'' in the implementation spec), edges whose
+endpoints lie wholly within the resampled region are discarded
+unconditionally and their boost contributions enter only the
+forward MH ratio; edges with one endpoint outside the region are
+discarded and their orphaned partner becomes a singleton.
+
+\subsubsection*{Verification protocol}
+\label{sec:phmm-mcmc-verification}
+
+The MCMC sampler is verified against four reference points:
+
+\begin{description}
+\item[E.1 Cross-validate against \texttt{aug\_phmm} (1-edge, large
+  $\alpha_z$).] At large $\alpha_z$ the infinite Pair HMM truncates
+  to a 0-or-1-edge model, and the per-cell match-marginal
+  $Q'_{ij}$ produced by the MCMC sampler should agree with the
+  exact $O(L^2 A^2)$ aug-PHMM 1-edge inside--outside.
+\item[E.2 Cross-validate against \texttt{aug\_phmm\_2edge} (2-edge,
+  moderate $\alpha_z$).] At moderate $\alpha_z$ the truncation
+  extends to 0-or-1-or-2-edge; agreement with the exact
+  $O(L^2 A^4)$ aug-PHMM 2-edge inside--outside is the next
+  consistency check.
+\item[E.3 Cross-validate against brute-force enumeration.] On
+  small sequence pairs $(L_x, L_y) \leq (5, 4)$ where all
+  alignments and all $\leq 5$-edge placements can be enumerated
+  directly, the MCMC sample mean of $Q'_{ij}$ must converge to the
+  brute-force value at the canonical $1/\sqrt{n}$ rate.
+\item[E.4 Detailed-balance sanity check (no-data case).] At
+  $H = 0$ (so $M \equiv 1$) the boost factor is identically one,
+  the per-block factor reduces to the baseline emission, and the
+  sampler should recover the no-edge TKF92 Pair HMM marginal
+  exactly --- with edge-set sample sizes distributed as the
+  prior Ewens distribution.
+\end{description}
+
+The first three checks pin the sampler to the exact reference at
+each of three orders of edge truncation; the fourth checks
+detailed balance independently of the data-conditioned target.
+
+\subsection{The conceptual hierarchy: infinite phylogenetic SCFG}
+\label{sec:phylo-scfg}
+
+\paragraph{The infinite Pair HMM is itself an approximation.} The
+infinite Pair HMM of equation~\ref{eq:infinite-hmm-factorisation}
+is the principled limit of the bounded-edge dynamic-programming
+approximations of \S\ref{sec:aug-phmm}, but it is itself an
+approximation to a still-more-principled object: the
+infinite-edge generalisation of the gravestone-augmented
+time-indexed pair SCFG of \S\ref{sec:gravestone-scfg} of
+Appendix~\ref{app:tkfdp}. That fuller model samples not only the
+visible alignment $A$ and the edge set $E$ but also the timed
+gravestone-augmented branch history $G$ comprising every fragment
+that ever existed during the branch (whether visible at the
+alignment endpoints, deleted on the branch, or transiently
+inserted then deleted), with the same canonical CRP rule of
+equation~\ref{eq:infinite-hmm-factorisation} governing edge spawn
+at every Match-class member of either an alive or a gravestone
+fragment. On the substitution side, transient gravestones inserted
+during the branch can be assigned the same $z_s$ key-DP class as
+their alive class-mates and therefore contribute coupling terms to
+those class-mates' rates during the gravestone's lifetime --- so
+the substitution likelihood at a Match cell $(i, j)$ depends on
+$G$, not just on $A$. The infinite Pair HMM of this appendix
+marginalises $G$ implicitly via the standard TKF92 Pair HMM
+substitution emissions, which is correct in expectation when
+transient lineages are rare or when their coupling contribution is
+small, but loses the within-branch dynamics that the
+gravestone-augmented SCFG captures.
+
+The resulting hierarchy is nested: the bounded-edge
+dynamic-programming methods of \S\ref{sec:aug-phmm} are exact in
+the limit of the infinite Pair HMM of this section; the infinite
+Pair HMM is exact in the limit of the infinite gravestone-augmented
+pair SCFG; and that fuller object is the natural fixed point at
+which the indel-side and the substitution-side principled
+formulations meet. The MCMC sampler described above samples from
+the middle level of this hierarchy; lifting it to the full
+infinite gravestone-augmented pair SCFG --- by interleaving the
+infinite-HMM CRP edge moves with the gravestone-augmented
+branch-history moves of \S\ref{sec:gravestone-scfg} of
+Appendix~\ref{app:tkfdp} --- is a natural extension.
+
+\paragraph{Further: the infinite gravestone-augmented
+\emph{phylogenetic} SCFG.} The pairwise hierarchy above lifts to
+the full multi-branch phylogenetic setting at no further modelling
+cost, by composition with the Felsenstein-style upwards--downwards
+machinery of \S\ref{sec:gravestone-scfg} that already glues
+per-branch gravestone-augmented histories into a tree-level
+posterior. At every internal node and along every branch of the
+tree, the gravestone-augmented latent state is sampled jointly
+with the alignment, while the same canonical CRP rule of
+equation~\ref{eq:infinite-hmm-factorisation} governs edge spawn at
+every Match-class member of every fragment (alive or gravestone)
+at every node. The MCMC sampler above lifts by interleaving (i)
+per-branch gravestone-augmented history moves of
+\S\ref{sec:gravestone-scfg}, (ii) per-class-pair CRP edge moves of
+this appendix, and (iii) the per-internal-node Felsenstein-style
+updates already present in the SVI loop of
+\S\ref{sec:gravestone-scfg}. Each ingredient is already
+load-bearing in the existing pipeline; no new modelling assumptions
+are required to assemble them.
+
+The full conceptual ladder is therefore:
+\begin{quote}
+mean-field pre-correction (deprecated; rem.~\ref{rem:deprecated-mean-field}) $\to$
+bounded-edge aug-PHMM (\S\ref{sec:aug-phmm}) $\to$
+infinite Pair HMM (\S\ref{sec:infinite-hmm}) $\to$
+infinite gravestone-augmented pair SCFG
+  (\S\ref{sec:infinite-hmm} $+$ \S\ref{sec:gravestone-scfg}) $\to$
+infinite gravestone-augmented \emph{phylogenetic} SCFG
+  (\S\ref{sec:phylo-scfg}),
+\end{quote}
+each rung exact in the limit of the next, the entire ladder
+falling out of the simple stick-breaking-TKF92-with-Potts
+construction of Appendices~\ref{app:tkfdp}--\ref{app:phmm} with no
+further mathematical machinery.

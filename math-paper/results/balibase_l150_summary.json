@@ -1,0 +1,160 @@
+{
+  "cherryml_C20": {
+    "post": {
+      "e_tp": 4581.678734981147,
+      "total_mass": 15579.482986653122,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    },
+    "hard": {
+      "e_tp": 5204.0,
+      "total_mass": 15242.0,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    },
+    "opt": {
+      "e_tp": 5077.0,
+      "total_mass": 15846.0,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    },
+    "fsa_sps": {
+      "e_tp": 5231.0,
+      "total_mass": 15540.0,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    }
+  },
+  "mafft_auto": {
+    "hard": {
+      "e_tp": 5472.0,
+      "total_mass": 15152.0,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    }
+  },
+  "mixdom_d3f1": {
+    "post": {
+      "e_tp": 4945.74364296607,
+      "total_mass": 15072.794595250225,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    },
+    "hard": {
+      "e_tp": 5383.0,
+      "total_mass": 14636.0,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    },
+    "opt": {
+      "e_tp": 5372.0,
+      "total_mass": 15609.0,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    },
+    "fsa_sps": {
+      "e_tp": 5394.0,
+      "total_mass": 14975.0,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    }
+  },
+  "muscle": {
+    "hard": {
+      "e_tp": 5575.0,
+      "total_mass": 15432.0,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    }
+  },
+  "tkf92_lg08": {
+    "post": {
+      "e_tp": 4838.921334068318,
+      "total_mass": 15127.912490164104,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    },
+    "hard": {
+      "e_tp": 5380.0,
+      "total_mass": 14556.0,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    },
+    "opt": {
+      "e_tp": 5202.0,
+      "total_mass": 15555.0,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    },
+    "fsa_sps": {
+      "e_tp": 5378.0,
+      "total_mass": 14915.0,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    }
+  },
+  "tkf92_K20": {
+    "post": {
+      "e_tp": 4921.364819985934,
+      "total_mass": 15128.558907873572,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    },
+    "hard": {
+      "e_tp": 5409.0,
+      "total_mass": 14646.0,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    },
+    "opt": {
+      "e_tp": 5324.0,
+      "total_mass": 15550.0,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    },
+    "fsa_sps": {
+      "e_tp": 5396.0,
+      "total_mass": 14972.0,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187
+    }
+  },
+  "infinite_phmm_K1_stub": {
+    "hard": {
+      "e_tp": 1083.45,
+      "total_mass": 2476.0775,
+      "gold": 1332,
+      "n_cells": 201441,
+      "n_pairs": 40,
+      "n_families": 5
+    }
+  },
+  "infinite_phmm_K4": {
+    "hard": {
+      "e_tp": 4827.22,
+      "total_mass": 14896.215,
+      "gold": 6358,
+      "n_cells": 1713982,
+      "n_pairs": 187,
+      "n_families": 22
+    }
+  }
+}

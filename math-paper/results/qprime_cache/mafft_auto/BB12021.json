@@ -1,0 +1,9 @@
+{
+  "method_name": "mafft_auto",
+  "family": "BB12021",
+  "params_key": "mafft_auto",
+  "kind": "hard",
+  "timestamp": 1778681530,
+  "n_pairs": 6,
+  "failed_pairs": []
+}
