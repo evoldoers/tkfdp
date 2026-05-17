@@ -1,0 +1,1416 @@
+% =============================================================
+% Appendix E: TKF-DP --- Dirichlet-process Potts coupling
+% Source: ~/tkf-dp/main.tex Sections 2 and 3, quoted near-verbatim.
+% Section numbering and labels have been adapted to fit the
+% supplement's overall scheme. References to the present
+% appendix's own equations are local; references to other
+% appendices use their supplement-level labels.
+% =============================================================
+
+The TKF-DP model decorates TKF92 with three independent Dirichlet
+processes that govern (i) the per-site key partition into Potts
+coevolutionary cliques; (ii) the per-site assignment to a
+substitution class; and (iii) the per-class-pair assignment to a
+Potts coupling atom. The class-level substitution dynamics is a
+multi-site reversible CTMC; the alignment likelihood remains plain
+TKF92. Inference proceeds by a variational E-step on the
+continuous-time class clique, Gibbs sweeps and Jain--Neal
+split--merge proposals on the three Dirichlet partitions, recursive
+traceback over a time-indexed gravestone-augmented pair SCFG for
+the augmented branch history, and a stochastic M-step on the
+corpus-level hyperparameters with closed-form
+Dirichlet--multinomial / Gamma--Poisson / Laplace conjugacies
+unlocking the new-class / new-atom base-measure integrals.
+
+\subsection{The TKF-DP generative model}
+\label{sec:tkfdp-model}
+
+The TKF92 model~\citep{ThorneEtAl92} of insertion, deletion, and
+substitution has the convenient property that the alignment path
+and the substitution history factorize: the marginal distribution
+over alignments is independent of the amino acid dynamics, and
+inference proceeds via a pair HMM on the alignment with substitution
+likelihoods plugged in pointwise. This factorization is exactly
+what is lost when site--site coevolutionary couplings are introduced
+naively, since the substitution process at any site then depends on
+the joint state of its coupled partners, and any coupling rule that
+consults the existing alignment to decide partners destroys the
+marginal pair HMM.
+
+We describe a minimal extension of TKF92 that re-introduces
+site--site Potts couplings while preserving the
+alignment--substitution factorization. Each newborn site is assigned
+a discrete key drawn i.i.d.\ from a Dirichlet process, and sites
+that share a key co-evolve under a Potts-modulated joint CTMC.
+Because the keys are drawn independently of the alignment, the
+alignment marginal is unchanged.
+
+The alignment--substitution factorization survives at the parameter
+level but, once couplings are present, breaks at the latent-variable
+level: the substitution likelihood conditional on the alignment
+depends on the full timed indel history, including transient
+(alignment-invisible) lineages whose presence transiently modifies
+the rates of co-class members. Inference therefore requires a
+tractable representation of timed indel histories. We obtain one
+via a gravestone-augmented latent state and a time-indexed pair
+SCFG whose inside--outside is closed form
+(\S\ref{sec:gravestone-scfg}).
+
+\begin{definition}[TKF-DP]
+\label{defn:tkfdp}
+Fix TKF92 indel parameters $(\lambda, \mu, r)$, a key concentration
+parameter $\alpha_z > 0$, and a symmetric $20 \times 20$ Potts
+coupling matrix $H$. The process jointly generates a TKF92
+alignment path, a key assignment for every site, and an amino acid
+trajectory at every site, as follows.
+\begin{enumerate}
+    \item Sample stick-breaking weights once, globally:
+    \[
+        \pi_k = \beta_k \prod_{l < k} (1 - \beta_l),
+        \qquad
+        \beta_k \stackrel{\text{iid}}{\sim} \mathrm{Beta}(1, \alpha_z).
+    \]
+    \item Run TKF92 indel dynamics with parameters $(\lambda, \mu, r)$,
+      giving a stochastic set of alive sites $S(t)$ over time.
+    \item At the birth of each new site $s$, draw a key
+    \[
+        z_s \mid \pi \sim \mathrm{Cat}(\pi),
+    \]
+    independently of all other sites, of the alignment path, and of
+    the substitution history. The key is fixed for the site's
+    lifetime.
+    \item At any time $t$, the alive sites $S(t)$ are partitioned
+      into equivalence classes $\{C_k(t)\}$ by the relation $z_s =
+      z_{s'}$. The amino acid states $\{x_s\}_{s \in S(t)}$ evolve
+      as independent CTMCs across classes; the CTMC on class $C$ is
+      a $|C|$-site reversible chain with stationary distribution
+    \[
+        \pi_C(x_C) \propto \exp\!\Big(-\!\!\sum_{\{i,j\} \subset C} H(x_i, x_j)\Big).
+    \]
+    Class composition is piecewise constant between birth/death
+    events; on each event, the affected class is rebuilt and the
+    surviving sites re-equilibrate under the new class generator.
+\end{enumerate}
+\end{definition}
+
+\begin{remark}[Factorization]
+Conditional on $\pi$, the key draws are i.i.d.\ across sites, so the
+joint distribution factorizes as
+\[
+    P(\mathrm{alignment},\, \pi,\, \{z_s\},\, \mathrm{substitution})
+    = P(\mathrm{alignment}) \cdot P(\pi) \cdot \prod_s P(z_s \mid \pi)
+      \cdot P(\mathrm{substitution} \mid \mathrm{alignment}, \{z_s\}).
+\]
+In particular, the marginal alignment likelihood is exactly that of
+TKF92, and the pair HMM one would use under $\alpha_z = \infty$ (no
+coupling) is unchanged.
+\end{remark}
+
+\begin{remark}[Partition statistics]
+Marginalizing $\pi$, the partition induced on any fixed finite set
+of sites is the Ewens partition with parameter $\alpha_z$,
+equivalent to a Chinese restaurant process draw~\citep{aldous1985}.
+The expected number of co-evolving classes among $L$ sites is
+$\mathcal{O}(\alpha_z \log L)$, and tuning $\alpha_z$ controls the
+sparsity of couplings: $\alpha_z \gg L$ yields
+$\mathcal{O}(L^2 / \alpha_z)$ co-evolving pairs with higher-order
+classes suppressed by additional factors of $L / \alpha_z$. Smaller
+$\alpha_z$ gives Ewens-distributed class sizes with heavier tails,
+including occasional larger cliques.
+\end{remark}
+
+\subsection{IBP variant}
+\label{sec:tkfdp-ibp}
+
+To allow each site to participate in multiple independent couplings,
+replace the Dirichlet process with an Indian Buffet
+Process~\citep{ibp}.
+
+\begin{definition}[TKF92-IBP]
+Sample feature frequencies $\{\pi_k\}_{k \geq 1}$ from an IBP with
+concentration $\alpha_z$. At the birth of each site $s$, draw a
+binary feature vector $b_s \in \{0, 1\}^{\mathbb{N}}$ with
+\[
+    b_{s,k} \mid \pi_k \stackrel{\text{ind}}{\sim} \mathrm{Bern}(\pi_k),
+\]
+independently across sites. Two alive sites $s, s'$ are coupled iff
+there exists $k$ with $b_{s,k} = b_{s',k} = 1$. The amino acid
+dynamics is the reversible CTMC on the alive sites with stationary
+distribution
+\[
+    \pi(x_S) \propto \exp\!\Big(-\!\!\sum_{\{s, s'\} \,:\, \exists k,\, b_{s,k} = b_{s',k} = 1} H(x_s, x_{s'})\Big).
+\]
+\end{definition}
+
+The same factorization observation applies: feature draws are i.i.d.\
+given $\{\pi_k\}$, so the marginal alignment likelihood remains
+plain TKF92. The IBP variant naturally accommodates hub structure
+(residues that interact with many partners) via heavy-tailed feature
+frequencies.
+
+\subsection{Site classes and a GTR-parameterized generator}
+\label{sec:gtr-potts}
+
+Real proteins exhibit substantial heterogeneity in equilibrium amino
+acid usage and in coupling profile: positions in $\alpha$-helices,
+$\beta$-sheets, buried cores, and disordered regions have distinct
+frequencies and distinct interaction patterns with their structural
+neighbours. We extend the model with a per-site latent class
+variable that determines both the uncoupled (point) substitution
+model and the per-pair Potts interaction tensor. The variable is
+non-evolving, drawn once at site birth, and we put a second
+Dirichlet process on it --- independent of the key DP --- so that
+the number of site classes is itself learned from data, in line
+with the original infinite-mixture CAT model of Lartillot and
+Philippe~\citep{lartillotcat}.
+
+\begin{definition}[Site-class TKF-DP]
+Fix the alphabet $\mathcal{A}$ with $|\mathcal{A}| = A = 20$, a
+symmetric exchangeability matrix
+$S \in \mathbb{R}^{A \times A}_{\geq 0}$ ($S_{xy} = S_{yx}$),
+per-site rate-multiplier hyperparameters $(a_\eta, b_\eta)$, a
+site-class concentration $\alpha_c > 0$, a Potts-atom concentration
+$\alpha_H > 0$, and base measures
+\[
+    G_0: \quad \pi^{(c)} \stackrel{\text{iid}}{\sim}
+              \mathrm{Dirichlet}(\kappa_\pi\, \bar\pi),
+    \qquad
+    G_0^H: \quad H_h(i, j) \stackrel{\text{ind}}{\sim}
+              \mathcal{N}\!\bigl(\mu_{kl},\, \tau_{kl}^{-1}\bigr)
+              \;\text{for } i \leq j,\;
+              H_h(j, i) := H_h(i, j),
+\]
+where $(k, l) = (\min(i, j), \max(i, j))$ index the $A(A+1)/2$
+unordered amino-acid pairs, and each Potts atom
+$H_h \in \mathbb{R}^{A \times A}$ is symmetric in $(i, j)$ by
+construction. Site classes are drawn from a Dirichlet process
+$D_c \sim \mathrm{DP}(\alpha_c, G_0)$ via stick-breaking; Potts
+atoms are drawn from a separate Dirichlet process
+$D_H \sim \mathrm{DP}(\alpha_H, G_0^H)$. At the birth of each site
+$s$, draw an independent per-site rate multiplier and a site class:
+\[
+    \eta_s \stackrel{\text{iid}}{\sim} \mathrm{Gamma}(a_\eta, b_\eta),
+    \qquad
+    c_s \mid D_c \stackrel{\text{iid}}{\sim} D_c,
+\]
+in addition to the DP key $z_s$
+(\S\ref{sec:tkfdp-model}); $\eta_s$, $c_s$, and $z_s$ are mutually
+independent and independent of the alignment path, and are fixed
+for the site's lifetime. The Potts coupling tensor is decomposed by
+class-pair: for each unordered pair of classes $\{c, c'\}$ that ever
+co-occur within a key DP class, draw a Potts-atom assignment
+\[
+    h_{cc'} \mid D_H \stackrel{\text{iid}}{\sim} D_H,
+\]
+at first co-occurrence and fixed thereafter; the materialized slice
+for the pair is $H_{c c'}(i, j) := H_{h_{cc'}}(i, j)$. The
+amino-acid trajectory on a DP key class $C$ is the single-site
+reversible CTMC with stationary distribution
+\[
+    \pi_C(x_C) \;\propto\; \prod_{s \in C} \pi^{(c_s)}(x_s) \cdot
+    \exp\!\Big(-\!\!\sum_{\{s, s'\} \subset C}\!\! H_{c_s c_{s'}}(x_s, x_{s'}) \Big),
+\]
+and (taking the F81 instance reversible with respect to this
+stationary)
+\[
+    Q^s\!\bigl(x \to x'; x_{C \setminus s}\bigr)
+    \;=\; \eta_s\, S_{xx'}\, \pi^{(c_s)}(x')\,
+    \exp\!\Bigl(-\tfrac{1}{2} \Delta H_s\Bigr),
+    \qquad
+    \Delta H_s = \!\!\sum_{s' \in C \setminus s}\!\![H_{c_s c_{s'}}(x', x_{s'}) - H_{c_s c_{s'}}(x, x_{s'})].
+\]
+\end{definition}
+
+\begin{remark}[GTR limit and singletons]
+For a singleton key DP class, $\Delta H_s \equiv 0$ and the rate
+reduces to $Q^s_{xy} = \eta_s S_{xy} \pi^{(c_s)}(y)$, the F81
+instance of GTR with class-specific equilibrium and a per-site rate
+multiplier. Marginalized over $c_s$ this is exactly the CAT
+infinite-mixture profile model of Lartillot and
+Philippe~\citep{lartillotcat}, augmented with Yang's gamma per-site
+rate variation~\citep{Yang1994a}. Coupling enters only via
+$\Delta H_s$ when the key DP class size exceeds one, so the model
+strictly extends the CAT--gamma combination by adding a
+coevolutionary tail.
+\end{remark}
+
+\begin{remark}[F81 vs.\ symmetric-Metropolis form]
+The F81 form $Q_{xy} \propto S_{xy} \pi(y)$ chosen above is one of
+two natural reversible instances of the GTR family with stationary
+$\pi$ and exchangeability $S$; the other is the symmetric-Metropolis
+instance $Q_{xy} \propto S_{xy} \sqrt{\pi(y)/\pi(x)}$. Both satisfy
+detailed balance with respect to the joint Potts stationary above.
+The symmetric-Metropolis form has the property that the
+eigendecomposition of its symmetrized similarity transform is
+independent of $\pi$, allowing one corpus-wide $A^3$ decomposition
+to be reused across all classes. We adopt the F81 form here because,
+combined with the secret-destination augmentation of
+\S\ref{sec:base-measure-conj}, it yields strict
+Dirichlet--multinomial conjugacy on $\pi^{(c)}$, which the
+symmetric-Metropolis form does not. The eigendecomposition then
+becomes per-class (one $A^3$ per class per outer step), which is
+small at $A = 20$ and is dominated by the Potts cluster work in any
+case.
+\end{remark}
+
+\begin{remark}[Three independent Dirichlet processes]
+The construction has \emph{three} Dirichlet processes acting on the
+substitution side: the key DP with concentration $\alpha_z$
+partitions sites into co-evolving cliques (\S\ref{sec:tkfdp-model});
+the site-class DP with concentration $\alpha_c$ assigns each site a
+profile $\pi^{(c)}$; and a Potts-atom DP with concentration
+$\alpha_H$ and base measure $G_0^H$ assigns each unordered class-pair
+$\{c, c'\}$ to a coupling atom $H_{h_{cc'}}$. With $\alpha_H$ small
+the $K(K+1)/2$ class-pair indices collapse onto a small number of
+canonical Potts atoms shared across class-pairs; with
+$\alpha_H \to \infty$ each class-pair has its own atom. The
+Potts-atom DP is what makes the model identifiable for $K_c \gg 1$:
+without it, the number of free Potts parameters scales as
+$K_c^2 \cdot A^2$; with it the count scales as
+$K_H \cdot A^2 + K_c^2$ class-pair indices, where $K_H$ is
+data-driven and typically much smaller than $K_c^2$.
+\end{remark}
+
+\begin{remark}[Per-class-pair side potentials]
+\label{rem:side-potentials}
+A useful refinement of the per-class profile $\pi^{(c)}$ is to give
+each unordered class-pair $\{c, c'\}$ its own pair of \emph{side
+potentials}
+$h^{(c, c')}_a, h^{(c, c')}_b \in \mathbb{R}^A$, with independent
+Gaussian priors centered at zero,
+\begin{equation}
+h^{(c, c')}_a(x), h^{(c, c')}_b(y) \;\sim\; \mathcal{N}(0, \tau_h^{-1}).
+\end{equation}
+The per-pair joint stationary then becomes
+\begin{equation}
+\log \pi^{(c, c')}_{\mathrm{joint}}(x, y) \;=\; \log \pi^{(c)}(x) + \log \pi^{(c')}(y) - h^{(c, c')}_a(x) - h^{(c, c')}_b(y) - H_{cc'}(x, y) - \log Z_{cc'},
+\end{equation}
+i.e.\ $h$ is the per-pair deviation of the effective per-site
+stationary
+$\pi^{\mathrm{eff}, a}_{cc'}(x) \propto \pi^{(c)}(x) e^{-h^{(c, c')}_a(x)}$
+from the per-class background $\pi^{(c)}$. For self-pairs $(c, c)$
+the two sites are exchangeable, so the joint distribution must be
+symmetric under swap $(x, y) \leftrightarrow (y, x)$. Combined with
+$H_{cc}$ symmetric in its arguments, this forces
+$h^{(c,c)}_a = h^{(c,c)}_b$; we parameterise self-pairs with a
+single shared vector $h^{(c,c)} \in \mathbb{R}^A$ (and prior
+$h^{(c,c)} \sim \mathcal{N}(0, \tau_h^{-1})$, contributing $A$ free
+parameters per self-pair rather than $2A$). Off-diagonal pairs
+$\{c, c'\}$ with $c \ne c'$ retain two independent vectors
+$h^{(c,c')}_a, h^{(c,c')}_b$ ($2A$ free parameters each).
+Reversibility of the F81-form joint generator is preserved by
+replacing the destination factor $\pi^{(c)}(x')$ in the site-1 flip
+rate with $\pi^{\mathrm{eff}, a}_{cc'}(x')$ (and analogously for
+site 2).
+
+The motivation is that $\pi^{(c)}$ captures the population-mean
+amino-acid usage of class $c$ \emph{averaged over all class-pair
+contexts}, while the actual usage of class $c$ when paired with
+class $c'$ may deviate (e.g.\ a Cys-bearing class paired with itself
+is more Cys-rich than the per-class average, because we are
+conditioning on disulfide-forming sites). The $h$ vectors absorb
+that deviation, leaving the Potts atom $H_{cc'}$ to capture the
+coupling \emph{above the marginal compositional shift}. The Gaussian
+prior pulls $h$ to zero so that any pair-specific deviation must be
+data-supported.
+\end{remark}
+
+\begin{remark}[Hierarchical structure of the $H$ base measure]
+The amino-acid-pair-indexed Gaussian base measure
+$\mathcal{N}(\mu_{kl}, \tau_{kl}^{-1})$ embeds an empirical-Bayes
+hierarchy: the corpus-level $(\mu_{kl}, \tau_{kl})$ encode the
+population-mean coupling propensity for each amino-acid pair
+(typically attractive for hydrophobic--hydrophobic,
+charge-complementary, etc., and repulsive for charge-like-like), and
+atom-specific deviations $H_h(i, j) - \mu_{kl}$ are learned around
+that mean with atom-specific magnitude controlled by the data.
+Symmetry of each $H_h$ in $(i, j)$ encodes the unordered-edge
+convention of Potts couplings; this is standard practice in the DCA
+literature~\citep{ekeberg2013} and is biologically natural in the
+absence of any a priori labelling distinguishing the two ends of an
+inter-class edge. The Gaussian prior on each $H_h$ is conjugate to
+the Gaussian (Hessian-based) Laplace approximation of the path-DCA
+likelihood, giving a closed-form Gaussian posterior on each
+materialized atom under the local quadratic expansion of
+\S\ref{sec:base-measure-conj}.
+\end{remark}
+
+\subsection{Class-level variational substitution likelihood}
+\label{sec:class-elbo}
+
+Inference under the model requires, for each branch of a phylogeny
+and each co-evolving DP class $C$, the per-branch transition
+probability $P(\mathbf{x}_C(t) \mid \mathbf{x}_C(0), \{c_s\}_{s \in C})$.
+Direct evaluation requires exponentiating a generator on
+$\mathcal{A}^{|C|}$ and is intractable beyond $|C| \approx 5$. The
+bulk of the key-DP partition is small-class for $\alpha_z$ in the
+practical regime, so exact computation handles most of the work;
+what remains is to control the tail of large classes.
+
+We derive a variational lower bound from an exact path-measure
+factorization on the class clique. The factorization is the analog,
+on path space, of the static pseudolikelihood approximation used in
+DCA inference~\citep{ekeberg2013}, but with the static partition
+function entirely absorbed into the conditioned-on initial state.
+Two variational families on the resulting Girsanov ELBO are natural.
+The first is the simpler scheme we develop here, parameterized by
+per-site distributions at internal tree nodes plus a single constant
+rate matrix per site per branch, with a closed-form ELBO via
+eigendecomposition and a Felsenstein-style pruning recursion for
+optimization. The second is the fully inhomogeneous mean-field
+scheme of Cohn et al.~\citep{cohn2010}, with time-varying rates and
+forward-backward ODE sweeps, which we describe as an upgrade for
+branches where the constant-rate scheme is too loose.
+
+\begin{proposition}[Path-measure factorization]
+Let $\sigma_C \in D([0,t]; \mathcal{A}^{|C|})$ be the trajectory of
+a single-site reversible CTMC on class $C$ with rate
+$Q^s(x_s \to x_s'; x_{C \setminus s})$ and stationary distribution
+$\pi_C$. The path measure satisfies
+\[
+    \mathbb{P}(\sigma_C) \;=\;
+    \pi_C\!\bigl(\sigma_C(0)\bigr)
+    \prod_{s \in C} \mathbb{P}_s\!\bigl(\sigma_s \,\big|\, \sigma_{C \setminus s}\bigr),
+\]
+where $\mathbb{P}_s(\cdot \mid \sigma_{C \setminus s})$ is the law
+of an inhomogeneous CTMC on site $s$ with rate
+$Q^s\!\bigl(\,\cdot\, ; \, x_{C \setminus s}(u)\bigr)$ at time $u$.
+\end{proposition}
+
+\noindent The factorization is exact: simultaneous jumps at distinct
+sites have zero Lebesgue measure, every jump is therefore
+attributable to a unique site, and the path log-density splits
+site-wise. The only intractable factor is $\pi_C(\sigma_C(0))$, which
+is conditioned upon for transition probabilities and so cancels.
+
+\subsubsection*{Constant-rate variational family}
+
+\begin{remark}[Variational family]
+The variational family is parameterized at two levels. At each
+internal tree node $v$ and site $s$, a discrete distribution
+$\nu_v^s \in \Delta^{|\mathcal{A}|-1}$ over residue states; node
+distributions factorize over sites,
+$\nu_v(\mathbf{x}_v) = \prod_s \nu_v^s(x_v^s)$. At each branch $b$
+between nodes $p$ and $c$ of length $t_b$ and each site $s \in C$,
+a constant rate matrix $\hat Q^s_b$ on $[0, t_b]$. Conditional on
+sampled endpoint states $(x_p^s, x_c^s) \sim \nu_p^s \otimes \nu_c^s$,
+the variational law on the branch is the CTMC bridge of
+$\hat Q^s_b$ from $x_p^s$ to $x_c^s$, with sites independent given
+endpoints. The joint variational law on the tree is
+\[
+    \mathbb{Q} = \prod_v \nu_v \cdot \prod_b \prod_{s \in C}
+    \mathbb{Q}^s_b\bigl(\sigma^s_b \,\big|\, x_p^s, x_c^s\bigr).
+\]
+\end{remark}
+
+\begin{proposition}[Closed-form per-branch ELBO]
+The path-measure KL contribution from branch $b$ and site $s$ has
+Girsanov form
+\[
+    \mathrm{KL}_{b, s} = \mathbb{E}_{\mathbb{Q}}\!\!\int_0^{t_b}\!\!
+    \sum_{x, x'} q^s_b(x; u)
+    \!\Bigl[\, \mathbb{E}_{u}\bigl[Q^s(x \to x'; x_{C \setminus s}(u))\bigr]
+    - \hat Q^s_b(x \to x')
+    + \hat Q^s_b(x \to x') \log\!\frac{\hat Q^s_b(x \to x')}{\exp \mathbb{E}_{u}[\log Q^s(\cdot)]} \Bigr]\, du,
+\]
+where $q^s_b(x; u) = \mathbb{E}_{x_p, x_c}[q^s_b(x; u \mid x_p, x_c)]$
+is the variational bridge marginal of site $s$ at time $u$ averaged
+over endpoint distributions, and the inner expectations
+$\mathbb{E}_{u}[\cdot]$ are over the product of \emph{instantaneous}
+neighbour bridge marginals at $u$,
+$\prod_{s' \neq s} q^{s'}_b(\cdot; u)$. The integrand is therefore a
+product of two time-varying bridge marginals at the same instant
+$u$, and the integral over $[0, t_b]$ does \emph{not} factorise into
+time-averages: the cross-temporal correlation between
+$q^s_b(\cdot; u)$ and $q^{s'}_b(\cdot; u)$ contributes to
+$\mathrm{KL}_{b,s}$ and is what makes the formula a strict lower
+bound. The bridge-expectation closed form below evaluates the integral
+correctly.
+
+In the constant-rate family, the stationary point of
+$\mathrm{KL}_{b,s}$ in $\hat Q^s_b$ admits no closed form in general
+because of the cross-temporal correlation. The geometric-mean rate
+\[
+    \log \hat Q^{s, *}_b(x \to x') \;=\;
+    \mathbb{E}_{\bar q^{C \setminus s}_b}\!\bigl[\log Q^s(x \to x'; x_{C \setminus s})\bigr],
+\]
+where $\bar q^{s'}_b(x) = (1/t_b) \int_0^{t_b} q^{s'}_b(x; u) du$
+is the time-averaged neighbour distribution for each $s' \neq s$,
+is the stationary point under the additional ``mean-field-of-bridges''
+assumption that $q^s_b(\cdot; u)$ and $q^{s'}_b(\cdot; u)$ are
+approximately uncorrelated in $u$ on $[0, t_b]$. This assumption is
+exact at $H = 0$ (sites independent under the variational law as
+well as under the truth), close to exact for small coupling, and
+only mildly violated at typical phylogenetic time scales; we take
+$\hat Q^{s, *}_b$ above as the chosen variational rate and evaluate
+the strict $\mathrm{KL}_{b, s}$ at this rate via the bridge-expectation
+formula in the Remark below. Each term of the resulting bound is
+$\geq 0$ by Jensen, so $\mathrm{KL}_{b, s} \geq 0$ and the ELBO is a
+strict lower bound on $\log P$, as required.
+\end{proposition}
+
+\begin{remark}[Closed-form ELBO via pairwise bridge expectations]
+\label{rem:bridge-expectations}
+Each rate $\hat Q^s_b$ admits an eigendecomposition
+$\hat Q^s_b = U^s D^s (V^s)$ with $V^s = (U^s)^{-1}$ and eigenvalues
+$\{\lambda^s_k\}$ (we drop the branch subscript $b$ for legibility).
+The forward and backward propagators have the same expansion:
+\[
+    [\exp(\hat Q^s u)]_{x_p, x} = \sum_k U^s_{x_p, k}\, V^s_{k, x}\, e^{\lambda^s_k u},
+    \quad
+    [\exp(\hat Q^s (t-u))]_{x, x_c} = \sum_l U^s_{x, l}\, V^s_{l, x_c}\, e^{\lambda^s_l (t-u)},
+\]
+so the per-site bridge marginal is
+\[
+    q^s_b(x; u \mid x_p, x_c) =
+    \frac{1}{P_s} \sum_{k, l} U^s_{x_p, k}\, V^s_{k, x}\,
+    U^s_{x, l}\, V^s_{l, x_c}\, e^{\lambda^s_k u}\, e^{\lambda^s_l (t-u)},
+\]
+with $P_s = [\exp(\hat Q^s t)]_{x_p, x_c}$ the bridge normalising
+constant. The branch integrand of $\mathrm{KL}_{b, s}$ becomes a sum
+over $(k, l)$ and over $(k', l')$ from the neighbour expansion, with
+pair-time integrals
+\[
+    \mathrm{HR}(\alpha, \beta, t) \;=\;
+    \begin{cases}
+    (e^{\alpha t} - e^{\beta t}) / (\alpha - \beta) & \alpha \neq \beta, \\
+    t e^{\alpha t} & \alpha = \beta,
+    \end{cases}
+\]
+which is the standard bridge-expectation~\citep{HolmesRubin2002}
+expression. The full integral over $[0, t_b]$ is a finite sum of
+$\mathrm{HR}$ evaluations and closed-form coefficients in
+$U, V, \lambda$.
+\end{remark}
+
+\subsubsection*{Optimization: Felsenstein-like pruning over node distributions}
+
+The node distributions $\nu_v^s$ optimise the ELBO under a
+Felsenstein-style upwards--downwards pass: each $\nu_v^s$ is the
+geometric mean of (i) the upwards-propagated likelihood from
+$\nu_v^s$'s subtree, (ii) the downwards-propagated prior from the
+rest of the tree, and (iii) the per-branch forward and backward
+propagators of $\hat Q^s$ on each adjacent branch. The pass is
+$O(\text{edges} \cdot A^2)$ per outer ELBO step, dominated by the
+per-branch matrix exponential. The rate $\hat Q^{s, *}_b$ is then
+re-computed under the fresh node distributions and the loop iterates
+to convergence; the ELBO is monotone increasing in each step.
+
+\subsubsection*{Jensen gap and the Cohn upgrade as endpoints of an
+adaptive refinement}
+
+The constant-rate scheme of the previous subsection and the
+inhomogeneous mean-field scheme of Cohn et al.~\citep{cohn2010} are
+not separate algorithms but the $N = 1$ and $N \to \infty$ ends of a
+single adaptive refinement. Subdivide a branch of length $t_b$ into
+$N$ sub-intervals at times $0 = u_0 < u_1 < \cdots < u_N = t_b$ with
+constant rate $\hat Q^s_{b, k}$ on each $[u_{k-1}, u_k]$, and a
+variational node distribution $\nu^s_k$ at each intermediate
+midpoint. The resulting variational law is a piecewise-constant CTMC
+bridge: a piecewise-constant approximation to whatever time-varying
+rate Cohn's scheme would use at the same fidelity. As $N \to \infty$
+with mesh refining, piecewise-constant rates become dense in
+continuous time-varying rates, so the variational family becomes
+Cohn's and the ELBO converges monotonically up. At the optimum, the
+$\nu^s_k$ are pinned by stationarity to the bridge marginals of the
+surrounding piecewise-constant CTMC --- the explicit-midpoint
+parameterisation is slack at the optimum.
+
+The Jensen-gap diagnostic per segment is the integrated AM--GM
+discrepancy of $Q^s$ against neighbour bridge marginals at the
+segment's resolution; it is closed form via the same eigendecomposition
+machinery and tells the algorithm where to refine. For typical
+phylogenetic branches ($t_b \in [0.1, 1]$) most segments need
+$N = 1$; high-coupling segments may benefit from $N = 2$ or $3$;
+only pathological branches need $N \to \infty$.
+Forced segmentation by composition-change events from the augmented
+indel history (\S\ref{sec:gravestone-scfg}) composes cleanly with
+this Jensen-driven refinement: subdivide first at every
+composition-change event, then optionally $N$-refine within each
+composition-constant segment.
+
+\begin{remark}[Cohn's inhomogeneous fixed point as the $N \to \infty$ limit]
+For a composition-constant segment requiring $N \to \infty$ refinement,
+the limit is Cohn et al.'s full inhomogeneous fixed point: a
+time-varying rate $\tilde Q^s(\cdot; u)$ obtained by alternating
+forward sweeps $\dot q_s = q_s \tilde Q^s$ from $\delta_{x_p^s}$,
+backward sweeps $\dot \rho_s = -\tilde Q^s \rho_s$ from
+$\delta_{x_c^s}$, and rate updates
+$\log \tilde Q^{s,*}(\cdot; u) = \mathbb{E}[\log Q^s(\cdot)]$
+pointwise in $u$, with bridge marginals
+$q^{\rm bridge}_s(x; u) \propto q_s(x; u)\, \rho_s(x; u)$.
+The midpoint construction above is the discretisation of this
+fixed point at mesh size $u_k - u_{k-1}$; the Cohn limit is recovered
+as the mesh shrinks to zero. Cohn et al.~\citep[\S 7]{cohn2010}
+also give the internal-node rule used by Felsenstein pruning under
+the time-varying rate.
+\end{remark}
+
+This is the lower-bound construction referenced in the Discussion for
+Potts components of size $> 2$: independent-coupling pairwise factorisation
+gives the $N{=}1$ lower bound, midpoint augmentation extends it to a
+formal ELBO, and $N \to \infty$ recovers the Cohn fixed point.
+Classes whose Jensen gap remains large after refinement are
+candidates for the $k$-clique cluster-variational upgrade of
+Linzner \& Koeppl~\citep{linznerkoeppl2018}, or for fallback to
+exact uniformization-based bridge sampling via Rao \&
+Teh~\citep{raoteh2013}.
+
+\subsection{Augmented indel histories via a time-indexed pair SCFG}
+\label{sec:gravestone-scfg}
+
+The class-level ELBO of \S\ref{sec:class-elbo} was derived under
+fixed class composition over a constant-composition segment of a
+branch. To compose with the tree we need the timed indel history on
+each branch, including \emph{transient} insertions: under coupling,
+an insertion that is born and then deleted on the same branch is not
+visible in the alignment but does change the rate of every other
+site in its DP class during its lifetime. The naive scheme of
+sampling alignment-visible indel timings from their TKF92 prior is
+inadequate for two distinct reasons: first, transient lineages are
+missed; second, even for visible events, the conditional density
+given the alignment depends on substitution evidence and is not what
+the alignment marginal alone provides.
+
+We resolve both issues by augmenting the latent state with
+\emph{gravestones}. The augmentation does not change the model. It
+changes the latent representation: every fragment that ever existed
+during the branch --- alive at start, alive at end, deleted on the
+branch, or transiently inserted then deleted --- is represented as
+a labeled position in the augmented branch history. With gravestones
+the alive count $N_a(s)$ is bounded by the visible count $N_v(s)$,
+so the indel CTMC bridge has a finite state space and admits a
+closed-form recursive sampler. The gravestone counts at internal
+nodes of the tree become latent variables resampled jointly with the
+rest of the augmented history.
+
+\subsubsection*{The branching process and its grammar}
+
+We first present the TKF91 case (single residue per fragment) where
+the branching structure is cleanest, then read off the TKF92
+expansion. Let $L(t)$ denote a single link observed $t$ time units
+after its birth. Under TKF91 dynamics, $L(t)$ has lifetime
+$\tau \sim \mathrm{Exp}(\mu)$, and during its lifetime spawns child
+links at rate $\lambda$. Each child is itself an $L$ of the
+appropriate residual age. The branching process is a
+continuous-time Galton--Watson process expressible as a stochastic
+context-free grammar with productions indexed by continuous time:
+\begin{align*}
+L(t) &\;\to\; A \cdot D(t,\, t)
+& &\text{at weight } e^{-\mu t}, \\
+L(t) &\;\to\; G_\tau \cdot D(t,\, \tau)
+& &\text{at density } \mu e^{-\mu \tau}\, d\tau, \;\; \tau \in (0, t), \\
+D(t,\, T) &\;\to\; L(t - u) \cdot D(t,\, T)
+& &\text{at density } \lambda \, du, \;\; u \in (0, T), \\
+D(t,\, T) &\;\to\; \varepsilon
+& &\text{at weight } e^{-\lambda T}.
+\end{align*}
+The terminals $A$ and $G_\tau$ stand for an alive residue and a
+gravestone residue that died at relative time $\tau$, respectively,
+each carrying a DP key, a site class, and an amino-acid trajectory
+over its lifetime as governed by \S\ref{sec:class-elbo}. The
+non-terminal $D(t, T)$ generates a list of child links born during
+a window of size $T$ inside an observation interval of size $t$.
+The reading is: a link either survives to observation (probability
+$e^{-\mu t}$) and can have spawned children at any time in
+$(0, t)$, or it died at some $\tau \in (0, t)$ (density
+$\mu e^{-\mu \tau}$) and can only have spawned children during
+$(0, \tau)$. The empty-list weight $e^{-\lambda T}$ is the
+probability of zero events from a Poisson process of rate $\lambda$
+over a window of $T$.
+
+\paragraph{TKF92 expansion.} The generalization to TKF92 replaces
+each single-residue terminal with a fragment of geometrically-distributed
+length, leaving the fragment-level branching structure entirely
+unchanged:
+\begin{align*}
+A &\;\to\; \mathcal{R}^A \cdot A^*,
+& A^* &\;\to\; \mathcal{R}^A \cdot A^* \;\;\text{at weight } r,
+& A^* &\;\to\; \varepsilon \;\;\text{at weight } 1 - r, \\
+G_\tau &\;\to\; \mathcal{R}^G_\tau \cdot G_\tau^*,
+& G_\tau^* &\;\to\; \mathcal{R}^G_\tau \cdot G_\tau^* \;\;\text{at weight } r,
+& G_\tau^* &\;\to\; \varepsilon \;\;\text{at weight } 1 - r,
+\end{align*}
+where $\mathcal{R}^A$ is a single alive residue and
+$\mathcal{R}^G_\tau$ a single gravestone residue with shared death
+time $\tau$. Fragment death is collective: all residues of a
+fragment share its lifetime $[0, \tau]$ and die together at $\tau$.
+Key-DP labels $z_s$ and class-DP labels $c_s$ are drawn
+independently per residue at fragment birth from their respective
+Chinese restaurant predictives, even within a single fragment, so a
+fragment can carry residues of several key classes and several site
+classes. The expansion is invisible to the indel skeleton --- the
+bivariate Riccati of the next subsection lives at the fragment level
+--- but enters the substitution likelihood and the DP-class
+composition through the per-residue payload.
+
+Pairing this with an ancestor sequence yields the pair version: each
+ancestor fragment present at branch start is an independent root of
+the recursion above, with $t = t_b$ the branch length; insertions
+appearing in the children list have no ancestor counterpart and
+carry only a descendant payload. The pair grammar generates an
+aligned pair of fragment sequences (with alive/gravestone labels on
+the descendant side) jointly with the parentage tree.
+
+\subsubsection*{Inside generating function and the bivariate Riccati}
+
+Let $f_t(z, w) = \mathbb{E}[z^{N_a(t)} w^{N_g(t)}]$ where $N_a, N_g$
+count alive and gravestone descendants of one root fragment of age
+$t$. The inside generating function of the grammar satisfies the
+Volterra fixed point
+\[
+f_t(z, w)
+\;=\; z\, e^{-\mu t}\, \exp\!\Bigl(\lambda \!\int_0^t (f_s(z, w) - 1)\, ds\Bigr)
+\;+\; w\!\int_0^t \mu e^{-\mu \tau}\, \exp\!\Bigl(\lambda \!\int_{t-\tau}^t (f_s(z, w) - 1)\, ds\Bigr)\, d\tau,
+\]
+which is equivalent to the forward equation
+\[
+\partial_t f_t(z, w) \;=\;
+\bigl[\lambda z^2 - (\lambda + \mu) z + \mu w\bigr] \, \partial_z f_t(z, w),
+\qquad f_0(z, w) = z.
+\]
+The right-hand side is quadratic in $z$, so the characteristic
+equation $\dot z = -[\lambda z^2 - (\lambda + \mu) z + \mu w]$ is
+Riccati. Define
+\[
+\Delta(w) \;=\; \sqrt{(\lambda - \mu)^2 + 4 \lambda \mu (1 - w)},
+\qquad
+z_\pm(w) \;=\; \frac{(\lambda + \mu) \pm \Delta(w)}{2 \lambda}.
+\]
+The Riccati flow
+$(z(t) - z_+) / (z(t) - z_-) = (z(0) - z_+)/(z(0) - z_-) \cdot e^{-\Delta(w) t}$
+inverts to give $f_t(z^*, w)$ in closed form, hence closed-form
+pointwise transition probabilities
+$P\!\bigl((N_a, N_g)(t)\,\big|\,(N_a, N_g)(0)\bigr)$ by coefficient
+extraction. Setting $w = 1$ recovers the standard linear
+birth-death PGF for $N_a$ alone.
+
+\subsubsection*{Recursive traceback sampler}
+
+Given an augmented history with endpoint counts
+$(a_0, g_0) = (N_a(0), N_g(0))$ and
+$(a^*, g^*) = (N_a(t_b), N_g(t_b))$, the within-branch indel
+history is sampled by recursive midpoint traceback on the bivariate
+process $(N_a, N_g)$. At each level of the recursion, sample a
+midpoint state from
+\[
+P\!\bigl((a_m, g_m) \,\big|\, (a_0, g_0), (a^*, g^*)\bigr)
+\;\propto\;
+P\!\bigl((a_0, g_0) \to (a_m, g_m);\, t_b/2\bigr) \cdot
+P\!\bigl((a_m, g_m) \to (a^*, g^*);\, t_b/2\bigr),
+\]
+both factors closed form via the Riccati. The midpoint state space
+is finite since $a_m, g_m \leq g^* + a^*$. Recurse on each half.
+The base case is reached when the residual subproblem has at most a
+small number of events (births and deaths), at which point the
+closed-form list of valid event interleavings is enumerable
+directly and event times are sampled from the corresponding
+hypoexponential simplex density. Total cost is
+$O((b + d) \log(b + d))$ per branch where $b, d$ are the branch
+totals of births and deaths.
+
+After event times are placed, parentage is sampled forward in time:
+at each birth, a uniform alive fragment is chosen as the parent; at
+each death, a uniform alive fragment is killed. Parentage uniformity
+is the standard exchangeability of the linear Galton--Watson tree.
+
+\subsubsection*{Inserted fragment and residue distributions}
+
+When a child fragment is added at time $u$ to a DP class $C$ that
+already contains alive fragments, the inserted residues are drawn
+from the conditional Boltzmann
+\[
+P\!\bigl(x_s(u^+) \,\big|\, x_{C \setminus s}(u^-)\bigr)
+\;\propto\;
+\pi^{(c_s)}\!\bigl(x_s(u^+)\bigr)\, \exp\!\Big(-\!\!\sum_{s' \in C \setminus s}\!\! H_{c_s c_{s'}}\!\bigl(x_s(u^+),\, x_{s'}(u^-)\bigr)\Big),
+\]
+which is exactly normalizable on the alphabet $\mathcal{A}$ even
+when the joint stationary on $C$ is intractable. This is the proper
+coupled generalization of the $\mathrm{Cat}(\pi)$ inserted-residue
+rule of standard TKF92.
+
+\subsubsection*{Composition with substitution and with the rest of
+the tree}
+
+The traceback gives a piecewise-constant DP-class composition on
+each branch, with segment boundaries at every (alive or gravestone)
+indel event. The variational ELBO of \S\ref{sec:class-elbo} applies
+to each segment as written, with the segment's class composition
+and duration. Bridge expectations accumulate over
+segments within each branch and across branches.
+
+Internal-node augmented states $(N_a, N_g)$-valued are sampled
+jointly across the tree. The standard upwards-downwards
+(Felsenstein-style) recursion applies because the closed-form
+per-branch transition kernel from the Riccati composes across
+branches: the marginal at each internal node, conditional on the
+rest of the tree, is a closed-form pointwise distribution
+computable in $O(1)$ given the per-branch kernel evaluations. The
+augmentation thus extends to a full tree-level closed-form sampler.
+
+\subsubsection*{Marginalizing the augmentation}
+
+Gravestones are an augmentation of the latent state, not of the
+data. The marginal likelihood of the observed alignment under the
+model is recovered by summing over gravestone configurations at
+every internal node and along every branch. The recursive traceback
+samples the augmented state, and the variational ELBO of
+\S\ref{sec:class-elbo} applied segment-wise on the augmented
+branches gives the conditional substitution likelihood. No other
+approximation enters at the indel level: the SCFG is the exact
+representation of TKF92's fragment-level dynamics, and the
+gravestone augmentation is what makes its inside-outside computable.
+
+\begin{remark}[Coalescent priors; ARG augmentation as a parallel construction]
+The per-branch SCFG depends on branch length only through $t_b$, so
+any prior on the tree --- including a coalescent prior on branch
+times --- composes with the gravestone-augmented sampler without
+modification. This is a free generalization that supports joint
+indel-aware coalescent inference on protein-coding regions, which
+existing coalescent frameworks typically handle by treating indels
+as missing data. Separately, the structural mechanism --- augmenting
+an unbounded latent process with non-observable entities so that an
+observed count provides a state-space bound --- carries over to the
+ancestral recombination graph: non-ancestral lineages in the ARG
+play the role of gravestones, bounding the per-genome-position bridge
+state space and admitting (we conjecture) a parallel closed-form
+recursive sampler.
+\end{remark}
+
+\subsection{Posterior sampling and parameter learning}
+\label{sec:tkfdp-svi}
+
+We turn to the inverse problem: given a corpus of MSAs
+$\{X_n\}_{n=1}^N$ with associated trees $\{T_n\}$ and fixed
+alignment paths, learn the corpus-level substitution hyperparameters
+\[
+\theta = \bigl(S,\, \alpha_z,\, \alpha_c,\, \alpha_H,\, a_\eta, b_\eta,\,
+\kappa_\pi, \bar\pi,\, \{\mu_{kl}, \tau_{kl}\}_{k \leq l}\bigr),
+\]
+namely the shared exchangeability $S$, the three DP concentrations
+$(\alpha_z, \alpha_c, \alpha_H)$, the per-site rate prior
+$(a_\eta, b_\eta)$, and the base-measure parameters for $G_0$ on
+$\pi^{(c)}$ and for $G_0^H$ on the entries of each Potts atom
+$H_h$. The per-site rate multipliers $\{\eta_s\}$, the per-class
+profiles $\{\pi^{(c)}\}$, the materialized Potts atoms $\{H_h\}$,
+and the class-pair Potts assignments $\{h_{cc'}\}$ are no longer
+parameters but \emph{latent} draws from the base measures; their
+posteriors are inferred per site, per class, per atom, and per
+class-pair respectively, with the corpus-level parameters governing
+the priors. Indel parameters $(\lambda, \mu, r)$ decouple cleanly at
+the parameter level via the alignment--substitution factorization
+of \S\ref{sec:tkfdp-model} and are learned from the alignment
+marginal alone by standard TKF92 EM; we focus on the substitution
+side. The latent variables on each MSA are the key-DP labels
+$\{z_s\}$, the site classes $\{c_s\}$, the per-site rates
+$\{\eta_s\}$, the within-class amino-acid trajectories
+$\{\sigma_C\}$, the unobserved internal-node states, the Potts-atom
+assignments $\{h_{cc'}\}$, and (per \S\ref{sec:gravestone-scfg}) the
+gravestone-augmented indel histories on every branch --- comprising
+the alive and gravestone counts $(N_a, N_g)$ at every internal
+node, plus the parentage tree and event times within each branch.
+
+\subsubsection*{Variational EM with bridge-expectation sufficient
+statistics}
+
+For singleton key-DP classes, $Q^s$ reduces to F81 with
+class-specific equilibrium, shared exchangeability, and per-site
+rate. The bridge expectations~\citep{HolmesRubin2002} --- expected transition counts $N^{(b,s)}_{xy}$ and
+dwell times $T^{(b,s)}_x$ along each branch $b$, conditioned on the
+endpoint amino acids --- are computable in closed form by
+integrating $\int_0^{t_b} e^{Q u} A\, e^{Q(t_b - u)}\,du$ in the
+eigenspace of the rate matrix. Aggregated appropriately they give
+closed-form posterior updates on every continuous latent on the
+substitution side:
+\begin{itemize}
+    \item $\pi^{(c)}$ has a Dirichlet posterior under the
+      $\mathrm{Dirichlet}(\kappa_\pi \bar\pi)$ prior, via the
+      secret-destination augmentation of
+      \S\ref{sec:base-measure-conj} below.
+    \item $\eta_s$ has a Gamma posterior under the
+      $\mathrm{Gamma}(a_\eta, b_\eta)$ prior; both shape and rate
+      updates are immediate from the bridge expectations.
+      The marginal site likelihood
+      $\int \mathrm{Gamma}(a_\eta, b_\eta) \cdot \mathrm{Poisson}(N_s^{\mathrm{acc}} \mid \eta_s \tilde T_s)\, d\eta_s$
+      is closed-form Negative-Binomial.
+    \item Each materialized Potts atom $H_h$ has a Gaussian
+      posterior under the $\mathcal{N}(\mu_{kl}, \tau_{kl}^{-1})$
+      prior, via the Gaussian (Hessian-based) Laplace approximation
+      of the path-DCA likelihood at the current iterate.
+\end{itemize}
+The shared exchangeability $S$ aggregates over all classes as in
+standard GTR EM. Site-class assignments $c_s$ and Potts-atom
+assignments $h_{cc'}$ are latent in the CRP sense, integrated over
+via the Gibbs sweeps below.
+
+For multi-site DP classes the joint generator on
+$\mathcal{A}^{|C|}$ has no usable eigendecomposition, and
+the bridge expectations cannot be applied to the coupled bridge directly. The
+variational construction of \S\ref{sec:class-elbo} is the
+substitute: at the variational fixed point each $s \in C$ has an
+inhomogeneous single-site bridge with rate $\tilde Q^{s,*}$ on each
+constant-composition segment of the branch
+(\S\ref{sec:gravestone-scfg}), and the bridge expectations apply to this
+bridge in its eigenspace. The integral identity goes through with
+$Q$ replaced by $\tilde Q^{s,*}(u)$ (piecewise-constant on a time
+grid within each segment), yielding per-site sufficient statistics
+$\tilde N^{(b,s)}_{xy}$, $\tilde T^{(b,s)}_x$ as well as per-pair
+co-occupancy times
+\[
+\tilde T^{(b, s, s')}_{xy} \;=\; \int_0^{t_b} q_s(x; u)\, q_{s'}(y; u)\, du,
+\]
+the latter immediate from the variational independence of single-site
+bridges given endpoints.
+
+The envelope theorem ensures that, evaluated at the variational
+fixed point, the gradient of the ELBO with respect to $\theta$ has
+no contribution from the implicit $\theta$-dependence of
+$\tilde Q^{s,*}$:
+\[
+\nabla_\theta \mathcal{L}
+\;=\; \mathbb{E}_\mathbb{Q}\!\bigl[\nabla_\theta \log \tfrac{d\mathbb{P}}{d\mathbb{Q}}\bigr]
+\;=\; \mathbb{E}_\mathbb{Q}\!\bigl[\nabla_\theta \log d\mathbb{P}\bigr].
+\]
+For the GTR-Potts generator this gradient has three structurally
+distinct pieces. The exchangeability gradient $\nabla_S \mathcal{L}$
+is a linear combination of the single-site $\tilde N^{(b,s)}_{xy}$
+counts as in standard GTR EM. The frequency gradient
+$\nabla_{\pi^{(c)}} \mathcal{L}$ aggregates over sites with
+$c_s = c$ and is again single-site. The coupling-tensor gradient is
+a path-space DCA M-step,
+\[
+\nabla_{H_{cc'}(x, x')} \mathcal{L}
+\;\propto\; \!\!\sum_{n, b}\!\!\sum_{\substack{s, s' \in C(n) \\ c_s = c,\, c_{s'} = c'}}\!\!\!\Bigl[\,\bigl(\text{expected } x_s = x,\, x_{s'} = x' \text{ co-occupancy under } \mathbb{P}\bigr) - \bigl(\text{same under } \mathbb{Q}\bigr)\,\Bigr],
+\]
+expressible in the same bridge-expectation format using the products
+$q_s(x; u) q_{s'}(x'; u)$ for the variational dwell-time terms and
+contributions from each variational jump intensity for the
+transition terms.
+
+\subsubsection*{MCMC over the discrete latents}
+
+The combinatorial latents $\{z_s\}$, $\{c_s\}$, and $\{h_{cc'}\}$
+admit straightforward Gibbs sampling. All three partitions are
+integrated over their respective stick-breaking weights via Chinese
+restaurant predictives. For the key DP,
+\[
+P(z_s = k \mid z_{-s}, \alpha_z)
+\;\propto\;
+\begin{cases}
+|C_k^{(-s)}| \cdot \mathcal{L}_{\text{class}}(C_k \cup \{s\}) / \mathcal{L}_{\text{class}}(C_k)
+& \text{(existing key class)}, \\
+\alpha_z \cdot \mathcal{L}_{\text{class}}(\{s\})
+& \text{(new singleton)},
+\end{cases}
+\]
+where $\mathcal{L}_{\text{class}}$ is the per-branch-aggregated
+class-level variational ELBO from \S\ref{sec:class-elbo} plus the
+contribution of the rest of the tree via Felsenstein pruning.
+Site-class updates use the class DP predictive,
+\[
+P(c_s = c \mid c_{-s}, \alpha_c, \theta)
+\;\propto\;
+\begin{cases}
+n_c^{(-s)} \cdot \mathcal{L}_{\text{site}}(s; \pi^{(c)})
+& \text{(existing class, profile $\pi^{(c)}$)}, \\
+\alpha_c \cdot \int \mathcal{L}_{\text{site}}(s; \pi')\, G_0(d\pi')
+& \text{(new class)},
+\end{cases}
+\]
+with the new-class integral closed form by the
+Dirichlet--multinomial conjugacy of
+\S\ref{sec:base-measure-conj}. The Potts-atom assignment
+$h_{cc'}$ for an unordered class-pair $\{c, c'\}$ is itself drawn
+by CRP-Gibbs,
+\[
+P(h_{cc'} = h \mid \text{rest}, \alpha_H)
+\;\propto\;
+\begin{cases}
+m_h^{(-cc')} \cdot \mathcal{L}_{\text{pair}}(\{c, c'\};\, H_h)
+& \text{(existing atom)}, \\
+\alpha_H \cdot \int \mathcal{L}_{\text{pair}}(\{c, c'\};\, H')\, G_0^H(dH')
+& \text{(new atom)},
+\end{cases}
+\]
+where $\mathcal{L}_{\text{pair}}$ is the path-DCA contribution from
+co-occurrences of classes $c$ and $c'$ across the corpus, and the
+new-atom integral is approximated by the Laplace scheme of
+\S\ref{sec:base-measure-conj}.
+
+Split--merge proposals of Jain--Neal type~\citep{jainneal2004} are
+essential for mixing on all three partitions, with acceptance ratios
+in terms of class-level (for $z$), site-aggregated (for $c$), or
+class-pair-aggregated (for $h$) ELBO ratios. All three concentrations
+$\alpha_z, \alpha_c, \alpha_H$ admit closed-form Gamma-prior
+posteriors given the respective partitions via the auxiliary-variable
+scheme of Escobar \& West~\citep{escobarwest1995}.
+
+\subsubsection*{Truncated stick-breaking on Potts atoms}
+
+The Potts-atom CRP admits a truncated stick-breaking (TSB)
+alternative that is cheaper per sweep, requires no new-atom Laplace
+branch inside the Gibbs step, and removes the empty-atom bookkeeping
+of the CRP. The construction mirrors Ishwaran \&
+James~\citep{ishwaranjames2001} and Blei \&
+Jordan~\citep{bleijordan2006} as applied to the site-class DP,
+transposed to the Potts-atom DP.
+
+Fix a truncation level $K_H^{\max}$. The natural choice is
+$K_H^{\max} = K_c(K_c + 1)/2$, the total number of unordered
+class-pairs --- with this bound the truncation is exactly tight
+(every class-pair could in principle have its own atom). Replace
+the CRP-Gibbs sweep over $\{h_{cc'}\}$ with the following two-step
+alternation:
+
+\begin{enumerate}
+\item \textbf{Beta CAVI / Gibbs on stick proportions.} Maintain
+  stick variables $\beta_h \sim \mathrm{Beta}(1, \alpha_H)$ for
+  $h < K_H^{\max}$, with $\beta_{K_H^{\max}} = 1$ and
+  $\rho_h = \beta_h \prod_{h' < h} (1 - \beta_{h'})$. Given the
+  current per-atom counts $m_h = \#\{(c, c') : h_{cc'} = h\}$, the
+  conditional posterior on $\beta_h$ is the closed-form Beta
+\[
+    \beta_h \mid m, \alpha_H \;\sim\;
+    \mathrm{Beta}\!\Bigl(1 + m_h,\; \alpha_H + \!\!\sum_{h' > h}\!\! m_{h'}\Bigr).
+\]
+Use either the posterior mean (CAVI) or a Beta sample (Gibbs).
+
+\item \textbf{Categorical resample on $\{h_{cc'}\}$.} For each
+  unordered class-pair $\{c, c'\}$, draw the atom assignment from
+  the closed-form Categorical
+\[
+    P(h_{cc'} = h \mid \text{rest}) \;\propto\;
+    \rho_h \cdot \mathcal{L}_{\text{pair}}(\{c, c'\};\, H_h),
+\]
+where $\mathcal{L}_{\text{pair}}$ is the path-DCA contribution from
+co-occurrences of classes $c$ and $c'$ across the corpus, evaluated
+at the current materialized atom $H_h$.
+\end{enumerate}
+
+\begin{remark}[Bijective initialization]
+Initialization at $K_H^{\max} = K_c(K_c + 1)/2$ should set each
+unordered class-pair to a \emph{distinct} atom drawn from $G_0^H$,
+not collapse all class-pairs onto a single shared atom. The latter
+is a chicken-and-egg failure mode: only the populated atom receives
+data through the Laplace M-step, so the others stay at the prior;
+the next TSB resample therefore prefers the populated atom for all
+pairs (its likelihood dominates the others' prior-only score), and
+the system collapses. The bijective init guarantees every atom
+carries at least one class-pair's data through the first Laplace
+M-step.
+\end{remark}
+
+\subsubsection*{Locality of DP updates under the SCFG augmentation}
+
+When the augmented indel history is resampled
+(\S\ref{sec:gravestone-scfg}), new gravestone fragments appear with
+new residues that need DP keys, and old gravestones disappear.
+Naively this would suggest a full DP-key resample after every
+augmentation step, which would be prohibitive. Exchangeability of
+the CRP and the segment-wise structure of the variational ELBO
+together remove almost all of this cost.
+
+The decomposition is two-step within a single sweep. The
+\emph{indel-skeleton step} resamples the gravestone-augmented history
+on every branch by the SCFG traceback of \S\ref{sec:gravestone-scfg}
+without touching DP keys; cost $O((b + d) \log(b + d))$ per branch,
+independent of DP state. The \emph{gravestone-key step} then
+assigns DP keys to each new residue $s$ on a gravestone fragment
+with lifetime $[u, v]$ on branch $b$, using the local CRP
+predictive over existing classes plus a singleton, evaluated against
+$\mathcal{L}_{\text{seg}}$ on segments of $b$ within the gravestone's
+lifetime. Adding $s$ to class $C_k$ changes that class's variational
+fixed point only on those segments, costing $O(|C_k| \cdot A^3)$
+per fixed-point iteration per touched segment. Per gravestone, the
+work is one Categorical draw with support equal to the existing
+classes plus a singleton, plus one local fixed-point re-solve on
+the affected segments.
+
+\subsubsection*{Closed-form base-measure integrals via complete-data augmentation}
+\label{sec:base-measure-conj}
+
+The base-measure integrals
+\[
+    \int \mathcal{L}_{\text{site}}(s; \pi')\, G_0(d\pi'), \qquad
+    \int \mathcal{L}_{\text{pair}}(\{c, c'\};\, H')\, G_0^H(dH'),
+\]
+that appear in the new-class and new-atom branches of the CRP
+predictives, and the analogous corpus-level marginals over
+$\eta_s$, all admit closed-form approximations under complete-data
+augmentation.
+
+\paragraph{Secret-destination augmentation for $\pi^{(c)}$.} The
+F81-form rate factors as
+$Q^s_{xy} = \eta_s \cdot S_{xy} \cdot \pi^{(c_s)}(y) \cdot \exp(-\tfrac{1}{2}\Delta H_s)$,
+which decomposes the dynamics into an $S$-driven Poisson proposal
+clock at rate $\eta_s S_{xy}$ from state $x$ to destination $y$,
+modulated by a Bernoulli filter that accepts the proposal with
+probability $\pi^{(c_s)}(y) \exp(-\tfrac{1}{2}\Delta H_s)$. To
+recover full multinomial structure on $\pi^{(c)}$ we augment each
+silent failure of a proposal of $y$ with a categorical \emph{secret
+destination} $j \neq y$, drawn from $\pi^{(c)}(j)/(1 - \pi^{(c)}(y))$
+on the simplex. Each proposal then casts exactly one categorical
+vote: the destination is $y$ with probability $\pi^{(c)}(y)$ on
+acceptance, and a secret $j$ with probability $\pi^{(c)}(j)$ on
+rejection. Marginally over the proposal, the vote is
+$\mathrm{Categorical}(\pi^{(c)})$, so the augmented count vector
+$N^{(c)} \in \mathbb{Z}_{\geq 0}^A$ satisfies
+\[
+    N^{(c)} \mid \pi^{(c)},\, \text{augmentation} \;\sim\;
+    \mathrm{Multinomial}\bigl(N^{(c)}_{\text{total}},\, \pi^{(c)}\bigr),
+\]
+and the posterior is the strict closed-form Dirichlet
+\[
+    \pi^{(c)} \mid N^{(c)} \;\sim\;
+    \mathrm{Dirichlet}\bigl(\kappa_\pi \bar\pi + N^{(c)}\bigr).
+\]
+In the EM/VBEM setting the augmentation is replaced by its
+conditional expectation: each proposal contributes $\pi^{(c)}(y)$ to
+$E[N^{(c)}_y]$ regardless of which destination was proposed. The
+Dirichlet update is then a fixed-point iteration whose limit is the
+conjugate posterior under the conditional augmentation. The
+new-class integral $\int \mathcal{L}_{\text{site}}(s; \pi')\, G_0(d\pi')$
+is the analytic ratio of multivariate Beta functions
+$B(\kappa_\pi \bar\pi + N^{(c)}) / B(\kappa_\pi \bar\pi)$.
+
+\paragraph{Gamma--Poisson conjugacy for $\eta_s$.} The F81
+substitution-count likelihood at site $s$ is itself Gamma-conjugate
+in $\eta_s$ without any need for the secret-destination
+augmentation. The expected substitution count along the tree is
+Poisson with rate $\eta_s \cdot \tilde T_s$, where
+\[
+    \tilde T_s \;=\; \sum_b \sum_x T^{(b,s)}_x \cdot
+    \sum_{y \neq x} S_{xy} \, \pi^{(c_s)}(y)
+\]
+is the $\pi$-weighted dwell-time integral. Under the
+$\mathrm{Gamma}(a_\eta, b_\eta)$ prior the conjugate posterior is
+closed form
+\[
+    \eta_s \mid \mathrm{path},\, \pi^{(c_s)} \;\sim\;
+    \mathrm{Gamma}\!\bigl(a_\eta + N_s^{\mathrm{acc}},\; b_\eta + \tilde T_s\bigr),
+\]
+with $N_s^{\mathrm{acc}} = \sum_b \sum_{x \neq y} N^{(b,s)}_{xy}$
+the total observed substitution count, and the per-site marginal
+likelihood is closed-form Negative-Binomial.
+
+\paragraph{Laplace for $H_h$.} Each Potts atom is real-valued and
+the path-DCA likelihood is locally Gaussian in $H_h$ to second
+order. We approximate
+\[
+    \log p_{\mathrm{path-DCA}}(\mathrm{data} \mid H_h)
+    \;\approx\; \log p_{\mathrm{path-DCA}}(\mathrm{data} \mid \hat H_h)
+    \;-\; \tfrac{1}{2} (H_h - \hat H_h)^\top \Lambda_h (H_h - \hat H_h),
+\]
+where $\hat H_h$ is the MAP under the current iterate, found by a
+few Newton or natural-gradient steps starting from a chosen seed,
+and $\Lambda_h = -\nabla^2_{H_h} \log p_{\mathrm{path-DCA}}$ is the
+Hessian at $\hat H_h$. Combined with the
+$\mathcal{N}(\mu_{kl}, \tau_{kl}^{-1})$ prior on each entry, the
+posterior is the closed-form Gaussian
+\[
+    H_h \mid \mathrm{data} \;\sim\;
+    \mathcal{N}\!\bigl(\hat H_h^{\mathrm{post}},\, (\mathrm{diag}(\tau_{kl}) + \Lambda_h)^{-1}\bigr).
+\]
+The Laplace estimate of the new-atom integral is the standard
+$\log p_{\mathrm{path-DCA}}(\hat H_h) + \log G_0^H(\hat H_h) + \tfrac{d}{2}\log(2\pi) - \tfrac{1}{2}\log\det(\mathrm{diag}(\tau_{kl}) + \Lambda_h)$
+with $d = A(A+1)/2$ the symmetric-slice dimension.
+
+\paragraph{Multi-seed Laplace mixture for multimodal posteriors.}
+The Laplace approximation collapses around a single mode and
+underestimates posterior mass elsewhere; for atoms that admit
+multiple plausible coupling patterns (e.g., charge-complementary
+vs.\ hydrophobic-hydrophobic minima) this is a genuine approximation
+error. We mitigate by running the few-step optimizer from a small
+number $K_{\mathrm{seed}}$ of distinct seeds, obtaining
+$K_{\mathrm{seed}}$ Laplace components, and combining them as a
+weighted Gaussian mixture.
+
+\subsubsection*{The recommended hybrid}
+
+The natural hybrid is:
+\begin{enumerate}
+    \item \textbf{Inner variational E-step.} For each MSA, branch
+      and DP class, segment the branch by the current sampled
+      augmented indel history and solve the geometric-mean fixed
+      point of \S\ref{sec:class-elbo} on each segment to obtain
+      $\{\tilde Q^{s,*}\}$ and the per-class ELBO. No parameter or
+      structure updates here.
+    \item \textbf{MCMC over discrete and augmentation latents.}
+      Resample augmented indel histories on every branch by recursive
+      traceback on the time-indexed pair SCFG of
+      \S\ref{sec:gravestone-scfg}, with closed-form midpoint
+      marginals from the bivariate Riccati and Felsenstein-style
+      upwards--downwards composition for internal-node augmentation
+      counts. Gibbs sweep over $\{z_s\}$, $\{c_s\}$, and
+      $\{h_{cc'}\}$ using the class-level ELBOs from step~1 as
+      evidence; periodic Jain--Neal split--merge proposals on each
+      partition.
+    \item \textbf{Stochastic M-step.} Compute bridge-expectation
+      sufficient statistics $\tilde N$, $\tilde T$,
+      $\tilde T_{\mathrm{pair}}$ from the variational single-site
+      bridges, summed over augmented constant-composition segments
+      within each branch, over a minibatch of MSAs. Take a stochastic
+      gradient step on the corpus-level hyperparameters
+      $\theta = (S, \alpha_z, \alpha_c, \alpha_H, a_\eta, b_\eta, \kappa_\pi, \bar\pi, \{\mu_{kl}, \tau_{kl}\})$.
+      Per-class $\pi^{(c)}$ updates by its closed-form Dirichlet
+      posterior under the secret-destination augmentation; per-site
+      $\eta_s$ marginalizes in closed form via Gamma--Poisson
+      conjugacy; per-atom $H_h$ updates by Laplace with multi-seed
+      mixture against the prior $G_0^H$. The three DP concentrations
+      update by the Escobar--West auxiliary-variable scheme.
+    \item \textbf{Iterate.} The inner variational fixed point in
+      step~1 is re-solved cheaply after each step because the
+      previous solution is a warm start.
+\end{enumerate}
+
+This factors the overall problem into the three regimes where each
+tool is strongest: variational for the continuous-time substitution
+dynamics where it admits closed-form rates and bridge-expectation
+sufficient statistics; MCMC for the discrete combinatorial latents
+where it mixes well and avoids mean-field pathologies; stochastic
+gradient for the continuous parameters $\theta$ where it scales to
+corpus-level training. In SVI form the M-step is over a minibatch
+of MSAs at each iteration and amortizes naturally over the corpus.
+
+\subsubsection*{Counts-tensor representation of the training corpus}
+
+Per family we precompute a counts tensor
+$(\text{cherry} \times \text{column} \times \text{AA-pair} \times \text{branch length})$,
+packed as int8, that decouples inference from raw MSA parsing and
+lets one outer SVI iteration scale to $10^3$--$10^4$ \Pfam\ families.
+Branch lengths are quantized to $n_t \approx 50$ geometrically spaced
+bins between $\tau_{\min}$ and $\tau_{\max}$; geometric spacing
+exploits that $\exp(Q\tau)$ varies fastest at small $\tau$, giving a
+$\sim 5\times$ cache reduction over linear quantization at no
+measurable accuracy cost. Per-class single-site log-transition
+matrices $(K_c, n_t, A^2)$ are precomputed once per outer iteration
+and shared across all families.
+
+\subsection{Pairwise alignment postprocessing}
+\label{sec:postprocessing}
+
+Multiple-sequence alignment tools of the FSA
+family~\citep{bradley2009fsa} (and other consistency-based schemes)
+operate on pairwise residue posterior matrices
+$Q^{(X, Y)}_{ij} = P(X_i \sim Y_j \mid X, Y)$ produced by per-pair
+forward--backward passes through a Pair HMM. The TKF-DP postprocessing
+target is the joint-marginal alignment-and-partition likelihood
+described next, in which an alignment $A$ together with a
+size-$\{1, 2\}$ partition $E$ of its Match cells contributes a
+product of per-block substitution factors with no class or
+rate-multiplier latent left explicit.
+
+\begin{remark}[Historical note: deprecated first-order correction]
+\label{rem:deprecated-mean-field}
+An early formulation of TKF-DP postprocessing expressed the
+coupling as a first-order mean-field correction
+$\log Q'_{ij} - \log Q_{ij} \approx \varepsilon \sum_{(i', j')}
+  Q_{i' j'} [M(i, j; i', j'; t) - 1]$
+to the baseline single-site posterior, with $\varepsilon$ a
+per-pair partner prior under the size-$\{1, 2\}$ Ewens
+distribution and $M$ a column-class-marginalized Potts boost. That
+correction is a first-order expansion of the joint marginal in
+the partner-prior strength and is now considered a heuristic
+stepping-stone; the modern infinite Pair HMM
+(\S\ref{sec:infinite-hmm} of Appendix~\ref{app:phmm}) treats the
+same coupling exactly via the joint-marginal target below, with
+class assignments and rate multipliers integrated analytically
+rather than re-marginalized at every column.
+\end{remark}
+
+\subsubsection*{The unified joint-marginal target}
+
+Let $\theta_{\mathrm{indel}} = (\lambda, \mu, r)$ be the TKF92
+indel parameters and $\alpha_z$ the Ewens partition concentration.
+Write $\mathrm{Match}(A)$ for the Match cells of an alignment $A$,
+and let $E$ be a set of unordered Match-cell edges (a partition of
+$\mathrm{Match}(A)$ into singletons of size~1 and doublets of
+size~2; we let $V(E) \subset \mathrm{Match}(A)$ denote the doublet
+endpoints). The TKF-DP joint marginal at branch length $t$ is
+\begin{equation}
+\label{eq:tkfdp-joint-marginal}
+P(X, Y; t) \;=\; \sum_A \pi_{\TKF92}(A \mid t, \theta_{\mathrm{indel}})
+  \sum_E \pi_{\mathrm{Ewens}}(E \mid \alpha_z, |\mathrm{Match}(A)|)
+  \!\!\!\prod_{(i, j) \in \mathrm{Match}(A) \setminus V(E)}\!\!\!\!\!\!
+    P_{\mathrm{singlet}}(x_i, y_j; t)
+  \prod_{e = ((i, j), (k, l)) \in E}\!\!\!\!\!
+    P_{\mathrm{doublet}}\bigl((x_i, x_k), (y_j, y_l); t\bigr),
+\end{equation}
+with the per-block primitives
+\begin{align}
+P_{\mathrm{singlet}}(a, b; t)
+  \;&=\; \sum_c \pi_c \,\, \pi^{(c)}(a) \,\, P_c(a \to b;\, t \cdot \eta),
+  \label{eq:p-singlet} \\
+P_{\mathrm{doublet}}\bigl((a, c), (b, d); t\bigr)
+  \;&=\; \sum_{c_1, c_2} \pi_c(c_1) \, \pi_c(c_2)
+  \,\, \pi_{\mathrm{joint}}^{c_1, c_2}(a, c)
+  \,\, P_{\mathrm{joint}}^{c_1, c_2}\!\bigl((a, c) \to (b, d);\, t, \eta_1, \eta_2\bigr).
+  \label{eq:p-doublet}
+\end{align}
+The doublet endpoint convention (matching the boost API of the
+released code) is that $(a, b)$ are the amino acids at the left
+endpoint $(i, j)$ and $(c, d)$ at the right endpoint $(k, l)$:
+$a = x_i$, $b = y_j$, $c = x_k$, $d = y_l$. Indices $c_1, c_2$ run
+over site classes and should not be confused with the
+endpoint-amino-acid index $c$.
+
+The empirical class prior $\pi_c$ is the per-class column count
+from training (\emph{not} uniform $1 / K_c$); the per-class profile
+$\pi^{(c)}(\cdot)$ is the trained \texttt{pi\_class}; the
+class-conditional transition is
+\begin{equation}
+\label{eq:p-class-cond}
+P_c(a \to b; t) \;=\; [\exp(Q_c \cdot t)]_{a, b},
+\qquad
+Q_c \;=\; (S_{\mathrm{LG08}} - \mathrm{diag}\, S_{\mathrm{LG08}})
+          \cdot \pi^{(c)}\![\,\cdot\,]^\top,
+\end{equation}
+the standard F81-form GTR generator with exchangeability
+$S_{\mathrm{LG08}}$~\citep{LG08} and class-specific stationary
+$\pi^{(c)}$. The joint stationary
+$\pi_{\mathrm{joint}}^{c_1, c_2}(a, c)$ at a coupled cell-pair is
+the joint stationary of a Potts atom $H = \mathtt{atoms}[\mathtt{assignments}[c_1, c_2]]$
+at the trained checkpoint (the trained
+\texttt{potts\_dp.atoms} indexed by \texttt{potts\_dp.assignments}),
+and $P_{\mathrm{joint}}^{c_1, c_2}$ is its time-evolved transition
+$\exp(Q_{\mathrm{joint}}^{c_1, c_2}(H) \cdot t)$ built by
+\texttt{build\_joint\_Q\_pair}$(H, \pi_a, \pi_b, S, \eta_{\mathrm{pair}} = (\eta_1, \eta_2))$
+as described in \S\ref{sec:gtr-potts}.
+
+\paragraph{Pair-background convention for the joint generator.}
+Two natural choices for the pair background $(\pi_a, \pi_b)$
+arise. The first is to use the LG08 single-site equilibrium
+$\pi_a = \pi_b = \pi^{\mathrm{LG08}}$ for every class-pair
+$(c_1, c_2)$. This is the \emph{canonical} convention for the
+released $K{=}4$ EM-warmup checkpoint: the trained Potts atoms
+were fit as deviations of the joint stationary from the
+LG08-pair-background reference, so inference under that checkpoint
+must use the same convention for the joint stationary and joint
+generator to match training. The second choice,
+$\pi_a = \pi^{(c_1)}$, $\pi_b = \pi^{(c_2)}$, uses the per-class
+profiles as the pair background; this is the structurally
+``cleaner'' choice for future model variants in which the Potts
+atoms are retrained against the per-class background, but it is
+\emph{not} consistent with the released checkpoint.
+
+\paragraph{Discrete-gamma rate-multiplier integration.}
+The per-site rate multiplier $\eta_s \sim \mathrm{Gamma}(a_\eta, b_\eta)$
+of \S\ref{sec:gtr-potts} is integrated analytically by the discrete-gamma
+quadrature of Yang~\citep{Yang1994a}: $K_r$ equiprobable bin
+medians $\eta_1, \ldots, \eta_{K_r}$ are taken from the
+$\mathrm{Gamma}(a_\eta, b_\eta)$ prior with uniform weight
+$1 / K_r$, and the per-block primitive of
+equation~\ref{eq:p-singlet} (resp.~\ref{eq:p-doublet}) is averaged
+over rate-multiplier draws via
+$P_{\mathrm{singlet}}(a, b; t) = K_r^{-1} \sum_{r = 1}^{K_r}
+  P_{\mathrm{singlet}}(a, b; t \cdot \eta_r)$
+(resp.\ a double sum over $(\eta_1, \eta_2)$ for the doublet).
+The Gamma hyperparameters $(a_\eta, b_\eta)$ at inference time
+must match those used at training time; the released
+$K{=}4$ EM-warmup checkpoint uses
+$(a_\eta, b_\eta) = (2, 2)$. The reduction $K_r = 1$ with
+$\eta = 1$ is the canonical evaluation of that checkpoint, since
+the stored per-site $\eta$ posteriors all collapsed to $1.0$
+during EM warmup; for retrained checkpoints with a non-trivial
+$\eta$ posterior, $K_r > 1$ is required.
+
+\paragraph{$t = 0$ reduction identities.}
+At $t = 0$ both per-block primitives reduce to the appropriate
+marginal stationary:
+\begin{align}
+\label{eq:p-singlet-t0}
+P_{\mathrm{singlet}}(a, a;\, 0)
+  \;&=\; \sum_c \pi_c \, \pi^{(c)}(a) \;\equiv\; \pi_{\mathrm{marg}}(a), \\
+\label{eq:p-doublet-t0}
+P_{\mathrm{doublet}}\bigl((a, c), (a, c);\, 0\bigr)
+  \;&=\; \sum_{c_1, c_2} \pi_c(c_1) \, \pi_c(c_2) \,
+        \pi_{\mathrm{joint}}^{c_1, c_2}(a, c)
+        \;\equiv\; \pi_{\mathrm{marg, pair}}(a, c).
+\end{align}
+These follow from $P_c(a \to b;\, 0) = \delta_{ab}$ and from the
+joint stationary $\pi_{\mathrm{joint}}^{c_1, c_2}$ being a
+fixed point of $P_{\mathrm{joint}}^{c_1, c_2}(\cdot;\, 0)$.
+
+\paragraph{The boost tensor.}
+The four-residue Potts \emph{boost} entering equation~\ref{eq:tkfdp-joint-marginal}
+through the doublet factor is the multiplicative deviation of the
+doublet emission from the product of two singlet emissions:
+\begin{equation}
+\label{eq:M-boost}
+M\bigl((a, c), (b, d); t\bigr)
+  \;\equiv\;
+  \frac{P_{\mathrm{doublet}}\bigl((a, c), (b, d); t\bigr)}
+       {P_{\mathrm{singlet}}(a, b; t) \cdot P_{\mathrm{singlet}}(c, d; t)}.
+\end{equation}
+Indexing convention as above: $(a, b)$ is the left endpoint, $(c, d)$
+the right endpoint. By construction $M \equiv 1$ when every Potts
+atom is zero (so $\pi_{\mathrm{joint}}^{c_1, c_2}$ factorizes into
+$\pi^{(c_1)} \otimes \pi^{(c_2)}$ and $P_{\mathrm{joint}}^{c_1, c_2}$
+factorizes into the two single-site $P_{c_i}$ factors). The boost
+tensor $M$ is the object that the bounded-edge augmented Pair HMM
+methods of Appendix~\ref{app:phmm} fold multiplicatively into the
+Match emissions to score doublets relative to singletons. The MCMC
+sampler operates on the joint $(A, E)$ directly via
+equation~\ref{eq:tkfdp-joint-marginal}, with class assignments and
+rate multipliers integrated analytically as above (\emph{not}
+sampled).
+
+\subsubsection*{Sequence annealing with coevolutionary scoring}
+\label{sec:coupled-annealing}
+
+The joint-marginal of equation~\ref{eq:tkfdp-joint-marginal}
+implies a per-Match-cell posterior $Q'_{ij}$ that the augmented
+Pair HMM machinery of Appendix~\ref{app:phmm} computes either
+exactly under bounded-edge truncation or stochastically under the
+infinite-Pair-HMM MCMC. An alternative routing of the same
+coupling signal applies the boost \emph{during} assembly: the
+greedy column-merging step inside the sequence annealer is extended
+to score pairs of merges jointly. With pair-HMM input, the
+canonical edge score is
+\begin{equation}
+\label{eq:tgf-edge}
+w(e) \;=\; \frac{2 \, Q_{ij}^{(X, Y)}}{g_i^{(X, Y)} + g_j^{(Y, X)}},
+\qquad e = \bigl(\text{column of } X_i,\ \text{column of } Y_j\bigr),
+\end{equation}
+where $g$ are the per-residue gap posteriors. The coupled-pair
+extension admits joint candidates consisting of pairs of merges
+scored as
+\begin{equation}
+\label{eq:coupled-score}
+W(e_1, e_2) \;=\; \log Q_{ij}^{(X, Y)} + \log Q_{i'j'}^{(X, Y)}
+  + \log M\bigl((X_i, X_{i'}), (Y_j, Y_{j'}); t\bigr),
+\end{equation}
+with $M$ the boost tensor of equation~\ref{eq:M-boost} evaluated
+at the observed amino acids. The first two terms are the baseline
+log-posteriors, and the third is the four-residue Potts
+contribution; the latter is identically zero when every Potts
+atom is zero.
+
+\paragraph{Greedy schedule and conflict resolution.} When a coupled
+candidate $(e_1, e_2)$ is popped from the queue, conflicts are
+resolved as follows. If both component merges are still admissible
+(no same-sequence conflict, no DAG cycle), both are committed in a
+single step and the boost-driven joint commit is recorded. If $e_1$
+is admissible but $e_2$ has been invalidated by an intervening
+merge, the candidate degrades to a single-edge merge with score
+$\log Q_{ij}$ and is re-inserted into the queue at that priority.
+If neither component is admissible, the candidate is dropped.
+
+\paragraph{Cost analysis.} Under two practical prunings (threshold
+$q_{\min} = 0.1$ on the single-edge posterior and threshold
+$\mu_{\min} = 0.1$ nat on $|\log M|$), the per-step cost is
+$O(L^2)$ amortized and the total cost is $O(L^3)$ in the worst
+case, comparable to the $O(L^2 \log L)$ baseline assembler.
+
+\paragraph{Augmented-PHMM versus greedy-pairwise tradeoff.}
+The augmented-Pair-HMM and infinite-Pair-HMM methods of
+Appendix~\ref{app:phmm} produce a single corrected posterior
+matrix $Q'$ that any downstream assembler can consume. The
+coupled-pair extension above scores strongly-coupled pairs jointly
+on their native four-residue domain inside the assembler, but
+commits greedily and is therefore vulnerable to local optima where
+an early commit on a coupled pair locks out a globally better
+arrangement. The two routes consume the same boost tensor $M$ of
+equation~\ref{eq:M-boost} but apply it at different points in the
+pipeline; the augmented-PHMM route is the principled default for
+TKF-DP postprocessing in \S\ref{app:phmm}.

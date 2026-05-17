@@ -1,0 +1,108 @@
+# SkyPilot task v2: per-pair BAliBASE worker that pulls ALL inputs
+# from a shared S3 bundle (balibase-bundle/) instead of sky-managed
+# file_mounts. Eliminates the AWS CreateBucket / concurrent-upload
+# bottleneck that broke the v1 launch at 96-way fan-out.
+#
+# Parameterised by env: FAMILY, PAIR_I, PAIR_J.
+
+resources:
+  # Multi-region + multi-GPU-type any_of: sky's optimizer picks any
+  # combination that has on-demand capacity NOW. Single region/type
+  # got bitten last night when us-east-1a ran out of g5.xlarge.
+  any_of:
+    - {cloud: aws, region: us-east-1, instance_type: g5.xlarge, accelerators: A10G:1, use_spot: false, disk_size: 64}
+    - {cloud: aws, region: us-east-2, instance_type: g5.xlarge, accelerators: A10G:1, use_spot: false, disk_size: 64}
+    - {cloud: aws, region: us-west-2, instance_type: g5.xlarge, accelerators: A10G:1, use_spot: false, disk_size: 64}
+    - {cloud: aws, region: eu-west-1, instance_type: g5.xlarge, accelerators: A10G:1, use_spot: false, disk_size: 64}
+    - {cloud: aws, region: us-east-1, instance_type: g6.xlarge, accelerators: L4:1,   use_spot: false, disk_size: 64}
+    - {cloud: aws, region: us-east-2, instance_type: g6.xlarge, accelerators: L4:1,   use_spot: false, disk_size: 64}
+    - {cloud: aws, region: us-west-2, instance_type: g6.xlarge, accelerators: L4:1,   use_spot: false, disk_size: 64}
+    - {cloud: aws, region: us-east-1, instance_type: g4dn.xlarge, accelerators: T4:1, use_spot: false, disk_size: 64}
+    - {cloud: aws, region: us-east-2, instance_type: g4dn.xlarge, accelerators: T4:1, use_spot: false, disk_size: 64}
+    - {cloud: aws, region: us-west-2, instance_type: g4dn.xlarge, accelerators: T4:1, use_spot: false, disk_size: 64}
+
+# No workdir, no file_mounts. Everything is in s3://${S3_BUCKET}/balibase-bundle/.
+
+envs:
+  S3_BUCKET: tkf-mixdom-gpu-618647024028
+  JIT_CACHE_KEY: jax-cache/g5xl-jax-2026-05-15.tar.gz
+  BUNDLE_PREFIX: balibase-bundle
+  RESULTS_PREFIX: balibase-runs/v11-aws-canonical
+  FAMILY: ''
+  PAIR_I: '0'
+  PAIR_J: '1'
+  CHECKPOINT: results/K4-emwarm-top1000-2026-05-09/_best_chkpt/state.npz
+  N_SWEEPS: '8000'
+  N_BURNIN: '2000'
+  SEED: '0'
+  OUT_SUFFIX: ''
+  N_REPLICATES: '2'
+
+setup: |
+  set -euo pipefail
+  sudo apt-get -y update
+  sudo apt-get -y install python3-pip python3-venv
+  python3 -m venv ~/venv
+  source ~/venv/bin/activate
+  pip install -U pip wheel
+  pip install awscli
+  # Pull all three S3 bundles (bali3pdbm, tkfmixdom, workdir).
+  cd ~
+  aws s3 cp s3://${S3_BUCKET}/${BUNDLE_PREFIX}/bali3pdbm.tar.gz . --quiet
+  aws s3 cp s3://${S3_BUCKET}/${BUNDLE_PREFIX}/tkfmixdom.tar.gz . --quiet
+  aws s3 cp s3://${S3_BUCKET}/${BUNDLE_PREFIX}/workdir.tar.gz . --quiet
+  mkdir -p ~/bio-datasets/data/balibase
+  tar xzf bali3pdbm.tar.gz -C ~/                  # gives ~/bio-datasets/...
+  mkdir -p ~/tkf-mixdom/python
+  tar xzf tkfmixdom.tar.gz -C ~/                   # gives ~/tkf-mixdom-python/
+  # Reshape to the path the sweep script expects:
+  mv ~/tkf-mixdom-python/tkfmixdom ~/tkf-mixdom/python/tkfmixdom
+  mv ~/tkf-mixdom-python/pyproject.toml ~/tkf-mixdom/python/pyproject.toml
+  mkdir -p ~/tkf-mixdom/python/experiments
+  mv ~/tkf-mixdom-python/experiments/* ~/tkf-mixdom/python/experiments/
+  rm -rf ~/tkf-mixdom-python
+  mkdir -p ~/sky_workdir
+  tar xzf workdir.tar.gz -C ~/sky_workdir
+  pip install -e ~/tkf-mixdom/python
+  pip install "jax[cuda12]"
+  # JIT cache.
+  mkdir -p ~/.cache/jax
+  aws s3 cp s3://${S3_BUCKET}/${JIT_CACHE_KEY} ~/jax-cache.tar.gz --quiet
+  tar xzf ~/jax-cache.tar.gz -C ~/
+  echo "JIT cache size on disk: $(du -sh ~/.cache/jax | awk '{print $1}')"
+
+run: |
+  set -euo pipefail
+  source ~/venv/bin/activate
+  export JAX_COMPILATION_CACHE_DIR=~/.cache/jax
+  export JAX_PERSISTENT_CACHE_DIR=~/.cache/jax
+  export JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES=-1
+  export JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS=0
+  export XLA_PYTHON_CLIENT_PREALLOCATE=false
+
+  if [ -z "$FAMILY" ]; then
+    echo "ERROR: FAMILY env var not set"
+    exit 2
+  fi
+
+  cd ~/sky_workdir
+  OUT=/tmp/${FAMILY}_${PAIR_I}_${PAIR_J}${OUT_SUFFIX}.json
+  timeout 28000 python analysis/scripts/sweep_infinite_phmm_balibase.py \
+    --checkpoint ${CHECKPOINT} \
+    --max-len 150 --mcmc-diagnostics --n-re-replicates ${N_REPLICATES} \
+    --n-sweeps ${N_SWEEPS} --n-burnin ${N_BURNIN} \
+    --fam-subset ${FAMILY} \
+    --pair-subset ${PAIR_I},${PAIR_J} \
+    --out ${OUT}
+
+  aws s3 cp ${OUT} s3://${S3_BUCKET}/${RESULTS_PREFIX}/${FAMILY}_${PAIR_I}_${PAIR_J}${OUT_SUFFIX}.json
+  CACHE_DIR="$HOME/.cache/tkf-mixdom-balibase/infinite_phmm_mcmc_K4_coupled_RE"
+  if [ -f "${CACHE_DIR}/${FAMILY}.npz" ]; then
+    aws s3 cp "${CACHE_DIR}/${FAMILY}.npz" \
+      "s3://${S3_BUCKET}/${RESULTS_PREFIX}/qprime/${FAMILY}_${PAIR_I}_${PAIR_J}${OUT_SUFFIX}.npz"
+  fi
+  if [ -f "${CACHE_DIR}/${FAMILY}.json" ]; then
+    aws s3 cp "${CACHE_DIR}/${FAMILY}.json" \
+      "s3://${S3_BUCKET}/${RESULTS_PREFIX}/qprime/${FAMILY}_${PAIR_I}_${PAIR_J}${OUT_SUFFIX}_qpcache.json"
+  fi
+  echo "PAIR DONE: pushed to s3://${S3_BUCKET}/${RESULTS_PREFIX}/"

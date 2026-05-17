@@ -1,0 +1,141 @@
+# SkyPilot task: run ONE BAliBASE pair via the K=4 RE sampler on a
+# g5.xlarge spot instance with pre-warmed JIT cache. Pushes the
+# per-pair JSON to S3.
+#
+# Parameterised by env vars: FAMILY, PAIR_I, PAIR_J.
+#
+# Usage (driver fills the envs):
+#   sky jobs launch -n "${FAMILY}_${PAIR_I}_${PAIR_J}" \
+#     --env FAMILY=BB12041 --env PAIR_I=0 --env PAIR_J=1 \
+#     --down --idle-minutes-to-autostop 15 \
+#     aws/balibase_one_pair.yaml
+#
+# Hard cap: ~8 h total (Layer 1 OS poweroff at 28800s; layer 2
+# timeout wrapper at 28300s; layer 3 sky --down on task exit).
+# Expected wall: ~95 min (90 min sampling + 1-2 min setup +
+# 30s result push). 8 h cap = ~5x headroom for unexpected
+# slowdowns (cache miss, spot-instance interruption + restart,
+# JIT-cache version mismatch fallback).
+
+resources:
+  cloud: aws
+  # No region pin -- let SkyPilot pick whichever region has g5
+  # CAPACITY (on-demand has its own quota per region, default ~4
+  # vCPU = 1 g5.xlarge per region; we'll multi-region across ~15
+  # active commercial regions to get ~15-20 parallel).
+  instance_type: g5.xlarge
+  # ON-DEMAND. Switched from spot (use_spot: true) because g5 spot
+  # is globally contested and our spot quota is below 4 vCPU in
+  # several regions. On-demand at $1.00/hr * 187 * 1.5 ~= $280
+  # for the full sweep. User raised budget cap to $400 to cover.
+  # Once the spot quota raise to 1024 vCPU lands, can revisit.
+  use_spot: false
+  accelerators: A10G:1
+  disk_size: 64
+
+workdir: /home/yam/tkf-dp
+
+# Targeted mounts. Layout matches the sweep script's
+# TKFMIXDOM = Path.home() / "tkf-mixdom" / "python" expectation so
+# `from expected_pair_f1 import ...` (after sys.path.insert) and
+# the experiments/* imports resolve correctly.
+file_mounts:
+  /home/ubuntu/tkf-mixdom/python/tkfmixdom: /home/yam/tkf-mixdom/python/tkfmixdom
+  /home/ubuntu/tkf-mixdom/python/pyproject.toml: /home/yam/tkf-mixdom/python/pyproject.toml
+  /home/ubuntu/tkf-mixdom/python/experiments/tkf92_fitted_params.json: /home/yam/tkf-mixdom/python/experiments/tkf92_fitted_params.json
+  /home/ubuntu/tkf-mixdom/python/experiments/expected_pairwise_balibase.py: /home/yam/tkf-mixdom/python/experiments/expected_pairwise_balibase.py
+  /home/ubuntu/bio-datasets/data/balibase/bali3pdbm: /home/yam/bio-datasets/data/balibase/bali3pdbm
+
+envs:
+  S3_BUCKET: tkf-mixdom-gpu-618647024028
+  JIT_CACHE_KEY: jax-cache/g5xl-jax-2026-05-15.tar.gz
+  RESULTS_PREFIX: balibase-runs/v10-aws
+  FAMILY: ''
+  PAIR_I: '0'
+  PAIR_J: '1'
+  CHECKPOINT: results/K4-emwarm-top1000-2026-05-09/_best_chkpt/state.npz
+
+setup: |
+  # No OS-level sleep-poweroff -- SkyPilot's setup wrapper waits
+  # on ALL child PIDs (even disowned ones), so backgrounded sleep
+  # blocks the setup block from ever exiting. Teardown safety is
+  # via `sky launch --down --idle-minutes-to-autostop` instead.
+
+  sudo apt-get -y update
+  sudo apt-get -y install python3-pip python3-venv
+  python3 -m venv ~/venv
+  source ~/venv/bin/activate
+  pip install -U pip wheel
+  pip install -e /home/ubuntu/tkf-mixdom/python
+  pip install "jax[cuda12]"
+  pip install awscli                            # needed to push/pull S3
+
+  # bali3pdbm file_mount already lands at /home/ubuntu/bio-datasets/...,
+  # which equals Path.home()/"bio-datasets"/... on the worker, so no
+  # symlink is needed. The previous `ln -sfn` here self-looped and
+  # tripped Errno 40 when iterdir() walked into it.
+
+  # Pull pre-warmed JIT cache.
+  mkdir -p ~/.cache/jax
+  aws s3 cp s3://${S3_BUCKET}/${JIT_CACHE_KEY} ~/jax-cache.tar.gz
+  tar xzf ~/jax-cache.tar.gz -C ~/  # extracts into ~/.cache/jax/
+  echo "JIT cache size: $(du -sh ~/.cache/jax | awk '{print $1}')"
+
+run: |
+  # Fail loudly. Without this, an upstream crash (Python, aws CLI,
+  # tar) propagates through to the trailing echo, which exits 0 and
+  # SkyPilot marks the job SUCCEEDED with no S3 output.
+  set -euo pipefail
+
+  source ~/venv/bin/activate
+  # See balibase_jit_primer.yaml for the JAX cache env-var rationale.
+  export JAX_COMPILATION_CACHE_DIR=~/.cache/jax
+  export JAX_PERSISTENT_CACHE_DIR=~/.cache/jax
+  export JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES=-1
+  export JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS=0
+  export XLA_PYTHON_CLIENT_PREALLOCATE=false
+
+  if [ -z "$FAMILY" ]; then
+    echo "ERROR: FAMILY env var not set"
+    exit 2
+  fi
+
+  cd ~/sky_workdir
+  OUT=/tmp/${FAMILY}_${PAIR_I}_${PAIR_J}.json
+
+  # Layer 2: Python timeout at 28300s, just inside the OS 28800s
+  # poweroff. Gives us ~8 min to push partial results if needed.
+  timeout 28300 python analysis/scripts/sweep_infinite_phmm_balibase.py \
+    --checkpoint ${CHECKPOINT} \
+    --max-len 150 --mcmc-diagnostics --n-re-replicates 2 \
+    --fam-subset ${FAMILY} \
+    --pair-subset ${PAIR_I},${PAIR_J} \
+    --out ${OUT}
+
+  # Push results to S3:
+  #
+  # (a) The diagnostics JSON (per-pair MCMC diag: ESS, r-hat, Geweke,
+  #     swap rates, setup/cache instrumentation, and the per-cell Q'
+  #     and Q'_baseline arrays *embedded* in the per_family entry).
+  #     Each AWS job writes ONE pair, so the merge tool can stitch
+  #     them back together.
+  # (b) The Q'-cache .npz + .json sitting in
+  #     ~/.cache/tkf-mixdom-balibase/<METHOD>/<FAMILY>.{npz,json}.
+  #     These hold the per-pair Q' arrays in the format expected by
+  #     the downstream FSA pipeline. We push them under a
+  #     per-pair-tagged key so we don't overwrite siblings in the
+  #     same family.
+  aws s3 cp ${OUT} s3://${S3_BUCKET}/${RESULTS_PREFIX}/${FAMILY}_${PAIR_I}_${PAIR_J}.json
+
+  CACHE_DIR="$HOME/.cache/tkf-mixdom-balibase/infinite_phmm_mcmc_K4_coupled_RE"
+  if [ -f "${CACHE_DIR}/${FAMILY}.npz" ]; then
+    aws s3 cp "${CACHE_DIR}/${FAMILY}.npz" \
+      "s3://${S3_BUCKET}/${RESULTS_PREFIX}/qprime/${FAMILY}_${PAIR_I}_${PAIR_J}.npz"
+  else
+    echo "WARN: cache .npz missing at ${CACHE_DIR}/${FAMILY}.npz"
+  fi
+  if [ -f "${CACHE_DIR}/${FAMILY}.json" ]; then
+    aws s3 cp "${CACHE_DIR}/${FAMILY}.json" \
+      "s3://${S3_BUCKET}/${RESULTS_PREFIX}/qprime/${FAMILY}_${PAIR_I}_${PAIR_J}_qpcache.json"
+  fi
+  echo "PAIR DONE: pushed diag + Q' to s3://${S3_BUCKET}/${RESULTS_PREFIX}/"
