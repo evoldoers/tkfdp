@@ -4,9 +4,10 @@ Cherry-trained, indel-aware Potts coevolution model — reference
 implementation for the paper:
 
 > **Maraschino: TKF-DP** (Holmes & Large)
-> bioRxiv preprint: **[BIORXIV/2026/725674](https://www.biorxiv.org/)**
-> *(awaiting bioRxiv screening, link will resolve once the
-> preprint is posted)*
+> bioRxiv preprint: **[10.64898/2026.05.16.725674v1](https://www.biorxiv.org/content/10.64898/2026.05.16.725674v1)**
+
+A web-browsable version of the supplement, plus links to all code
+and data releases, lives at [tkfdp.net](https://tkfdp.net).
 
 ## Repository
 
@@ -32,6 +33,7 @@ GitHub Releases page.
 
 | Tag | Contents |
 |---|---|
+| [`code-2026-05-19`](../../releases/tag/code-2026-05-19) | Source-code snapshot of this repo at the bioRxiv submission, packaged as a GitHub-generated tarball |
 | [`results/K4-emwarm-top1000-2026-05-09`](../../releases/tag/results/K4-emwarm-top1000-2026-05-09) | TKF-DP $K_c{=}4$ EM-warmup checkpoint (Pfam top-1000), backs Figs 3-5 and Table 1 row inf-PHMM-$K{=}4$ |
 | [`qprime-bali3pdbm-2026-05-16`](../../releases/tag/qprime-bali3pdbm-2026-05-16) | Q' caches (per-pair posteriors) for all 8 methods compared in Tables 1+2, ~3.6 GB across 8 tarballs |
 
