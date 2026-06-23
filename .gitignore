@@ -14,6 +14,10 @@ math-paper/main.pdf
 *.log
 *.out
 *.pdf
+# ...but keep the paper's figure PDFs: they are build artifacts the drop
+# must ship so math-paper/main.tex compiles from a clean clone. See
+# CLAUDE.md "Canonical source vs. published copy".
+!math-paper/figures/*.pdf
 *.synctex.gz
 *.toc
 

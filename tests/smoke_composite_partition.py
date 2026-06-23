@@ -68,7 +68,7 @@ class FakeSVIState:
     potts_dp: object
 
 
-def make_state(K_c=1, with_h=False, H_scale=0.0, seed=0):
+def make_state(K_c=1, H_scale=0.0, seed=0):
     A_local = 20
     rng = np.random.default_rng(seed)
     pi_class = np.tile(np.asarray(PI_LG08), (K_c, 1))
@@ -78,10 +78,9 @@ def make_state(K_c=1, with_h=False, H_scale=0.0, seed=0):
     cp_idx, _ = canonical_pair_idx_table(K_c)
     assignments = np.asarray(cp_idx, dtype=np.int64)
     counts = np.ones(n_pairs, dtype=np.int64)
-    h_pairs = np.zeros((n_pairs, 2, A_local)) if with_h else None
     pdp = PottsDPState(
         K_c=K_c, A=A_local, atoms=atoms, assignments=assignments,
-        counts=counts, alpha_H=1.0, h_pairs=h_pairs,
+        counts=counts, alpha_H=1.0,
     )
     return FakeSVIState(K_c=K_c, A=A_local,
                         pi_class=pi_class, potts_dp=pdp)
@@ -105,7 +104,7 @@ def make_boost_state_for_pair(state, x_seq, y_seq, t):
 def make_setup(L=8, t=0.4, alpha_z=10.0, H_scale=0.0, seed=0):
     Q_lg, pi_lg = rate_matrix_lg()
     x, y = make_test_pair(L=L, seed=seed)
-    state = make_state(K_c=1, with_h=False, H_scale=H_scale, seed=seed)
+    state = make_state(K_c=1, H_scale=H_scale, seed=seed)
     bs = make_boost_state_for_pair(state, x, y, t)
     setup = precompute_partial_forward(
         x, y, t, 0.02, 0.05, 0.5, Q_lg, pi_lg, bs, alpha_z=alpha_z)
@@ -264,7 +263,7 @@ def test_V4_msa_roundtrip():
 def test_V5_composite_loglik_cherry():
     print("\n=== V.5: composite_loglik_cherry end-to-end ===")
     Q_lg, pi_lg = rate_matrix_lg()
-    state = make_state(K_c=1, with_h=False, H_scale=0.5, seed=0)
+    state = make_state(K_c=1, H_scale=0.5, seed=0)
     x, y = make_test_pair(L=8, seed=1)
     t = 0.4
     bs = make_boost_state_for_pair(state, x, y, t)

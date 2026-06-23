@@ -27,6 +27,9 @@ A^2 x A^2 eigh is small.
 
 from __future__ import annotations
 
+import sys
+import warnings
+
 import jax
 import jax.numpy as jnp
 
@@ -37,14 +40,42 @@ A2 = A * A
 JITTER = 1e-6  # diagonal jitter on symmetrized Q before eigh to avoid degenerate-eigenvalue NaNs in the JVP
 
 
+_LEGACY_SINGLE_PI_BANNER = (
+    "\n"
+    "============================================================\n"
+    " WARNING: legacy single-pi joint Q called ({fn}).\n"
+    " This path uses ONE stationary distribution (default LG08) for\n"
+    " BOTH sites of a coupled column-pair, ignoring per-site-class\n"
+    " stationaries. It is NOT on the canonical v2 training graph.\n"
+    " Use joint_stationary_pair / build_joint_Q_pair with explicit\n"
+    " (pi_a, pi_b) instead.\n"
+    "============================================================\n"
+)
+
+
+def _warn_legacy_single_pi(fn_name: str) -> None:
+    # Loud, impossible-to-miss: both a Python UserWarning (so test runners
+    # and IDEs surface it) and a stderr banner (so it shows in log files
+    # even when warning filters silence the UserWarning).
+    warnings.warn(
+        f"{fn_name} uses a single pi (default LG08) for both sites; "
+        f"use build_joint_Q_pair / joint_stationary_pair with per-class pi.",
+        UserWarning, stacklevel=3,
+    )
+    sys.stderr.write(_LEGACY_SINGLE_PI_BANNER.format(fn=fn_name))
+    sys.stderr.flush()
+
+
 def joint_stationary(H: jnp.ndarray,
                      pi: jnp.ndarray = PI_LG08_J) -> jnp.ndarray:
-    """pi_joint[x, y] = pi[x] * pi[y] * exp(-H[x, y]) / Z, returned as (400,).
+    """LEGACY single-pi joint stationary. Emits a loud warning at every call.
 
-    Uses a single class-stationary pi for both sites. For inter-class
-    pairs (cluster size 2 with c_s != c_t) pass a "pi-pair" via the
-    `joint_stationary_pair` variant.
+    Computes pi_joint[x, y] = pi[x] * pi[y] * exp(-H[x, y]) / Z with a SINGLE
+    pi (default LG08) for both sites. Retained only for v1 callers (composite
+    likelihood, sim, val_loglik); the canonical v2 substitution path uses
+    `joint_stationary_pair(H, pi_a, pi_b)` with per-class pi for each site.
     """
+    _warn_legacy_single_pi("joint_stationary")
     H_sym = 0.5 * (H + H.T)
     log_w = jnp.log(pi)[:, None] + jnp.log(pi)[None, :] - H_sym
     log_w = log_w - jax.scipy.special.logsumexp(log_w)
@@ -53,21 +84,11 @@ def joint_stationary(H: jnp.ndarray,
 
 def joint_stationary_pair(H: jnp.ndarray,
                           pi_a: jnp.ndarray,
-                          pi_b: jnp.ndarray,
-                          h_a: jnp.ndarray | None = None,
-                          h_b: jnp.ndarray | None = None) -> jnp.ndarray:
+                          pi_b: jnp.ndarray) -> jnp.ndarray:
     """For pair (s, t) with classes (a, b): pi_joint[x, y] =
-    pi_a[x] * pi_b[y] * exp(-h_a[x] - h_b[y] - H[x, y]) / Z.
-
-    h_a, h_b are optional per-class-pair side potentials (Gaussian-prior
-    deviations from the per-class background). Default zero (current behavior).
-    """
+    pi_a[x] * pi_b[y] * exp(-H[x, y]) / Z."""
     H_sym = 0.5 * (H + H.T)
     log_w = jnp.log(pi_a)[:, None] + jnp.log(pi_b)[None, :] - H_sym
-    if h_a is not None:
-        log_w = log_w - h_a[:, None]
-    if h_b is not None:
-        log_w = log_w - h_b[None, :]
     log_w = log_w - jax.scipy.special.logsumexp(log_w)
     return jnp.exp(log_w).reshape(A2)
 
@@ -76,7 +97,7 @@ def build_joint_Q(H: jnp.ndarray,
                   pi: jnp.ndarray = PI_LG08_J,
                   S: jnp.ndarray = S_LG08_J,
                   eta_pair: tuple[float, float] = (1.0, 1.0)) -> jnp.ndarray:
-    """Build the 400 x 400 joint generator under F81 form.
+    """LEGACY single-pi joint generator. Emits a loud warning at every call.
 
     Site-1 flip rate (x, y) -> (x', y):  eta_1 * S[x, x'] * pi(x') * exp(-0.5 dH_1)
     Site-2 flip rate (x, y) -> (x, y'):  eta_2 * S[y, y'] * pi(y') * exp(-0.5 dH_2)
@@ -88,7 +109,12 @@ def build_joint_Q(H: jnp.ndarray,
     symmetric pi_a = pi_b = pi case (within-class cluster), the joint
     generator is reversible w.r.t. the joint Potts stationary
     pi(x) pi(y) exp(-H(x, y)) / Z.
+
+    LEGACY: This is the single-pi path predating the F81-form per-class-pi
+    reparam. Use ``build_joint_Q_pair(H, pi_a, pi_b, S, eta_pair)`` with
+    per-class pi for the canonical v2 training path.
     """
+    _warn_legacy_single_pi("build_joint_Q")
     eta_1, eta_2 = eta_pair
     H_sym = 0.5 * (H + H.T)
     S_off = S - jnp.diag(jnp.diag(S))   # zero diagonal
@@ -120,28 +146,17 @@ def build_joint_Q(H: jnp.ndarray,
 def build_joint_Q_pair(H: jnp.ndarray,
                         pi_a: jnp.ndarray, pi_b: jnp.ndarray,
                         S: jnp.ndarray = S_LG08_J,
-                        eta_pair: tuple[float, float] = (1.0, 1.0),
-                        h_a: jnp.ndarray | None = None,
-                        h_b: jnp.ndarray | None = None) -> jnp.ndarray:
+                        eta_pair: tuple[float, float] = (1.0, 1.0)) -> jnp.ndarray:
     """Inter-class variant of build_joint_Q: site-1 uses pi_a, site-2 uses pi_b.
-    Reversible w.r.t. pi_a(x) pi_b(y) exp(-h_a(x) - h_b(y) - H(x, y)) / Z.
-
-    h_a, h_b are optional per-class-pair side potentials. The site-flip
-    rate to destination x' picks up an additional exp(-0.5 * dh_a) factor
-    where dh_a = h_a(x') - h_a(x), so the resulting Q remains reversible
-    w.r.t. the modified joint stationary.
+    Reversible w.r.t. pi_a(x) pi_b(y) exp(-H(x, y)) / Z.
     """
     eta_1, eta_2 = eta_pair
     H_sym = 0.5 * (H + H.T)
     S_off = S - jnp.diag(jnp.diag(S))
-    # Site-1 destination factor: pi_a(x') * exp(-h_a(x')); the metropolis
-    # half-correction folds into the H_sym factor + a per-site h half.
-    site1_dest = pi_a if h_a is None else pi_a * jnp.exp(-h_a)
-    site2_dest = pi_b if h_b is None else pi_b * jnp.exp(-h_b)
-    R1 = eta_1 * (S_off * site1_dest[None, :])[:, None, :] * jnp.exp(
+    R1 = eta_1 * (S_off * pi_a[None, :])[:, None, :] * jnp.exp(
         -0.5 * (H_sym.T[None, :, :] - H_sym[:, :, None])
     )
-    R2 = eta_2 * (S_off * site2_dest[None, :])[None, :, :] * jnp.exp(
+    R2 = eta_2 * (S_off * pi_b[None, :])[None, :, :] * jnp.exp(
         -0.5 * (H_sym[:, None, :] - H_sym[:, :, None])
     )
     eye = jnp.eye(A)

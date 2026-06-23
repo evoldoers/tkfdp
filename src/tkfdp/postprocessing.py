@@ -21,9 +21,9 @@ Public API:
   build_per_classpair_joint_emit(state, t, S=None) -> (K_c, K_c, A, A, A, A)
       Per-class-pair joint emission tensor
       P_joint((a, a') -> (b, b'); t, H_{c,c'}) for every ordered class-pair
-      (c, c'). For c <= c' the canonical Potts atom + side potentials are
-      used; for c > c' the (a <-> a', b <-> b') swap of the canonical entry
-      is materialized so the tensor is symmetric under the joint swap.
+      (c, c'). For c <= c' the canonical Potts atom is used; for c > c' the
+      (a <-> a', b <-> b') swap of the canonical entry is materialized so
+      the tensor is symmetric under the joint swap.
   class_posteriors_from_baseline(per_class_emit, x_seq, y_seq, pi_class)
       -> (L_X, L_Y, K_c)  gamma_{ij}(c) of eq. gamma in the paper.
   pair_emission_boost(Q_baseline, gamma, per_class_emit, joint_per_cp,
@@ -51,11 +51,7 @@ from .generator import (
     symmetrize_eigh,
     transition_matrices,
 )
-from .potts_dp import (
-    PottsDPState,
-    canonical_pair_idx_table,
-    canonical_pair_is_diag,
-)
+from .potts_dp import PottsDPState
 
 
 # --- Per-class single-site emissions ---------------------------------------
@@ -97,21 +93,18 @@ def build_per_class_match_emit(pi_class: np.ndarray, t: float,
     return jax.vmap(per_class)(pi_j)
 
 
-# --- Per-class-pair joint emissions (with Potts coupling + side potentials)
+# --- Per-class-pair joint emissions (with Potts coupling)
 
 
 def _per_classpair_canonical_joint(pi_a: jnp.ndarray, pi_b: jnp.ndarray,
                                        H: jnp.ndarray, t: float,
-                                       S: jnp.ndarray,
-                                       h_a: Optional[jnp.ndarray] = None,
-                                       h_b: Optional[jnp.ndarray] = None
-                                       ) -> jnp.ndarray:
-    """exp(Q_joint * t) for a single ordered class-pair (a, b), with Potts
-    atom H and optional side potentials. Returns (A^2, A^2) in the same
-    state-ordering convention as build_joint_Q_pair (state index = a*A + b).
+                                       S: jnp.ndarray) -> jnp.ndarray:
+    """exp(Q_joint * t) for a single ordered class-pair (a, b) under Potts
+    atom H. Returns (A^2, A^2) in the same state-ordering convention as
+    build_joint_Q_pair (state index = a*A + b).
     """
-    Q = build_joint_Q_pair(H, pi_a, pi_b, S=S, h_a=h_a, h_b=h_b)
-    pi_j = joint_stationary_pair(H, pi_a, pi_b, h_a=h_a, h_b=h_b)
+    Q = build_joint_Q_pair(H, pi_a, pi_b, S=S)
+    pi_j = joint_stationary_pair(H, pi_a, pi_b)
     Lambda, U_sym, sqrt_pij = symmetrize_eigh(Q, pi_j)
     P = transition_matrices(jnp.asarray([t]), Lambda, U_sym, sqrt_pij)[0]
     return P  # (A^2, A^2)
@@ -127,8 +120,7 @@ def build_per_classpair_joint_emit(state, t: float,
     is the joint-substitution probability that an ancestral *unordered*
     column-pair of classes (c, c') with state (a at site 1 of c, a' at site
     1 of c') evolves to (b, b') over branch length t under the trained
-    Potts atom assigned to canonical class-pair {c, c'} + the matching
-    side potentials.
+    Potts atom assigned to canonical class-pair {c, c'}.
 
     For ordered (c, c') with c > c' we use the canonical (c', c) joint and
     swap site indices so the tensor is symmetric under simultaneous swap
@@ -139,32 +131,17 @@ def build_per_classpair_joint_emit(state, t: float,
     pi_class = jnp.asarray(state.pi_class)
     atoms = jnp.asarray(state.potts_dp.atoms)             # (K_H, A, A)
     assignments = state.potts_dp.assignments              # (K_c, K_c) int
-    h_pairs = state.potts_dp.h_pairs                       # may be None
-    cp_idx_np, cp_swap_np = canonical_pair_idx_table(K_c)
     S_j = jnp.asarray(S_LG08_J if S is None else S)
-    use_h = h_pairs is not None
-    if use_h:
-        h_pairs_j = jnp.asarray(h_pairs)
 
     P_table = np.zeros((K_c, K_c, A, A, A, A), dtype=np.float64)
     for c in range(K_c):
         for cp in range(K_c):
             atom_idx = int(assignments[c, cp])
             H = atoms[atom_idx]
-            if use_h:
-                k_can = int(cp_idx_np[c, cp])
-                swap = int(cp_swap_np[c, cp])
-                h_a = h_pairs_j[k_can, swap]
-                h_b = h_pairs_j[k_can, 1 - swap]
-            else:
-                h_a = h_b = None
             P_flat = _per_classpair_canonical_joint(
-                pi_class[c], pi_class[cp], H, t, S_j, h_a=h_a, h_b=h_b
+                pi_class[c], pi_class[cp], H, t, S_j
             )                                              # (A^2, A^2)
             P_6d = np.asarray(P_flat).reshape(A, A, A, A)  # (a, a', b, b')
-            # Note: build_joint_Q_pair encodes site-1 = a, site-2 = a' and
-            # the ordered ROW state index is a*A + a'; column state index
-            # is b*A + b'. So P_flat[a*A + a', b*A + b'] = P((a, a')->(b, b')).
             P_table[c, cp] = P_6d
     return jnp.asarray(P_table)
 

@@ -71,7 +71,7 @@ class FakeSVIState:
     potts_dp: object
 
 
-def make_state(K_c=4, with_h=False, H_scale=0.0, seed=0):
+def make_state(K_c=4, H_scale=0.0, seed=0):
     """Build a small synthetic TKF-DP state for tests."""
     A = 20
     rng = np.random.default_rng(seed)
@@ -82,10 +82,9 @@ def make_state(K_c=4, with_h=False, H_scale=0.0, seed=0):
     cp_idx, _ = canonical_pair_idx_table(K_c)
     assignments = np.asarray(cp_idx, dtype=np.int64)
     counts = np.ones(n_pairs, dtype=np.int64)
-    h_pairs = np.zeros((n_pairs, 2, A)) if with_h else None
     pdp = PottsDPState(
         K_c=K_c, A=A, atoms=atoms, assignments=assignments,
-        counts=counts, alpha_H=1.0, h_pairs=h_pairs,
+        counts=counts, alpha_H=1.0,
     )
     return FakeSVIState(K_c=K_c, A=A, pi_class=pi_class, potts_dp=pdp)
 
@@ -237,7 +236,7 @@ def test3_M_equals_1_collapse():
     t = 0.4
 
     # Build state with H=0 (so M=1 everywhere).
-    state0 = make_state(K_c=2, with_h=False, H_scale=0.0)
+    state0 = make_state(K_c=2, H_scale=0.0)
     bs = make_boost_state_for_pair(state0, x, y, t)
 
     # Verify M is ~1 by checking the log-M field at one anchor.
@@ -301,7 +300,7 @@ def test4_padding_mask():
     Lx, Ly = x.shape[0], y.shape[0]
     t = 0.4
 
-    state0 = make_state(K_c=2, with_h=False, H_scale=0.2)
+    state0 = make_state(K_c=2, H_scale=0.2)
     bs = make_boost_state_for_pair(state0, x, y, t)
 
     Q_unp, Lex_unp, _, _ = scfg_corrected_posterior(
@@ -638,7 +637,7 @@ def smoke_BB11001(n_residues=30):
     print(f"  loaded {len(seqs)} sequences, lengths "
           f"{ {k: len(v) for k, v in seqs.items()} }")
 
-    state = make_state(K_c=4, with_h=False, H_scale=0.2)
+    state = make_state(K_c=4, H_scale=0.2)
     log_trans, state_types, sub_matrix, pi_out, Q_lg, pi_lg = get_pair_hmm_inputs()
 
     names = list(seqs.keys())

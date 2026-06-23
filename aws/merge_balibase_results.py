@@ -134,7 +134,7 @@ def main():
     # Optional Q' cache stitching.
     if args.qprime_cache_dir:
         print()
-        print('Stitching Q\\'-cache per family...')
+        print("Stitching Q'-cache per family...")
         qprime_prefix = f'{args.prefix}/qprime'
         qprime_names = list_pair_files(qprime_prefix)
         npz_names = [n for n in qprime_names if n.endswith('.npz')]

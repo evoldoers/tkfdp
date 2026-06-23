@@ -69,13 +69,6 @@ class PottsDPState:
     # currently assigned. K_H_active = K_H_max = K_c(K_c+1)/2 always.
     rho: np.ndarray | None = None         # (K_H_max,)
     tsb_betas: np.ndarray | None = None   # (K_H_max - 1,) stick proportions
-    # Side-potential extension: per-class-pair Gaussian-prior h vectors that
-    # modify the per-site stationary at each pair. Stored at the canonical
-    # unordered-pair index (c <= c'); shape (K_c(K_c+1)/2, 2, A) where
-    # h_pairs[k, 0] = h_a (vector for the first class of canonical pair) and
-    # h_pairs[k, 1] = h_b (second class). For self-pair (c,c) the two slots
-    # are tied to the same vector. None disables side potentials.
-    h_pairs: np.ndarray | None = None     # (K_c(K_c+1)/2, 2, A) or None
 
 
 def _class_pair_idx(K_c: int) -> tuple[np.ndarray, list[tuple[int, int]]]:
@@ -307,16 +300,14 @@ def _kh_max(K_c: int) -> int:
 
 
 def canonical_pair_idx_table(K_c: int) -> tuple[np.ndarray, np.ndarray]:
-    """Build lookup tables for the canonical-pair indexing used by h_pairs.
+    """Lookup tables for canonical-pair indexing of unordered class-pairs.
 
     Returns:
       cp_idx[c1, c2] = index k in {0..K_c(K_c+1)/2 - 1} of the unordered
                         pair {c1, c2}, with the convention min(c1,c2) ≤
                         max(c1,c2) for the canonical (a, b) ordering.
-      cp_swap[c1, c2] = 0 if c1 <= c2 (canonical orientation), 1 if c1 > c2
-                         (need to swap h_a/h_b at gather).
+      cp_swap[c1, c2] = 0 if c1 <= c2 (canonical orientation), 1 if c1 > c2.
     """
-    n_canonical = _kh_max(K_c)
     cp_idx = np.zeros((K_c, K_c), dtype=np.int64)
     cp_swap = np.zeros((K_c, K_c), dtype=np.int64)
     k = 0
@@ -324,44 +315,15 @@ def canonical_pair_idx_table(K_c: int) -> tuple[np.ndarray, np.ndarray]:
         for cp in range(c, K_c):
             cp_idx[c, cp] = k
             cp_idx[cp, c] = k
-            # Swap only when ordered pair has c1 > c2 (off-canonical orientation)
             cp_swap[cp, c] = 1
             k += 1
     return cp_idx, cp_swap
 
 
-def canonical_pair_is_diag(K_c: int) -> np.ndarray:
-    """Boolean mask of shape (K_c(K_c+1)/2,), True where the canonical pair
-    is a self-pair (c, c). For self-pairs the two sites are exchangeable,
-    so the side-potential vectors h_a, h_b must be tied (h_a = h_b) to
-    keep the joint pair distribution symmetric and the joint Q reversible.
-    """
-    cp_idx, _ = canonical_pair_idx_table(K_c)
-    n_canonical = _kh_max(K_c)
-    is_diag = np.zeros(n_canonical, dtype=bool)
-    for c in range(K_c):
-        is_diag[int(cp_idx[c, c])] = True
-    return is_diag
-
-
-def symmetrize_h_pairs_diag(h_pairs: np.ndarray, K_c: int) -> np.ndarray:
-    """In-place project h_pairs onto the symmetry constraint h_a = h_b on
-    self-pairs (c, c). Slot 1 is overwritten with slot 0 for diagonal
-    canonical pairs; off-diagonal pairs are unchanged.
-    """
-    if h_pairs is None:
-        return h_pairs
-    is_diag = canonical_pair_is_diag(K_c)
-    diag_idx = np.flatnonzero(is_diag)
-    h_pairs[diag_idx, 1, :] = h_pairs[diag_idx, 0, :]
-    return h_pairs
-
-
 def init_potts_tsb(K_c: int, alpha_H: float,
                      mu_prior: np.ndarray, tau_prior: np.ndarray,
                      rng: np.random.Generator,
-                     K_H_max: int | None = None,
-                     use_side_potentials: bool = False) -> PottsDPState:
+                     K_H_max: int | None = None) -> PottsDPState:
     """Initialize a TSB-Potts state: K_H_max atoms drawn from G_0^H, with
     each unordered (c, c') class-pair assigned to a DIFFERENT atom slot
     (since K_H_max == #class-pairs, the assignment is bijective).
@@ -410,14 +372,10 @@ def init_potts_tsb(K_c: int, alpha_H: float,
             counts[h] += 1
     rho = np.full(K_H_max, 1.0 / K_H_max)
     tsb_betas = np.full(K_H_max - 1, 1.0 / K_H_max)
-    h_pairs = None
-    if use_side_potentials:
-        n_canonical = _kh_max(K_c)             # K_c(K_c+1)/2
-        h_pairs = np.zeros((n_canonical, 2, A), dtype=np.float64)
     return PottsDPState(
         K_c=K_c, A=A, atoms=atoms, assignments=assignments, counts=counts,
         alpha_H=alpha_H, mu_prior=mu_prior, tau_prior=tau_prior,
-        rho=rho, tsb_betas=tsb_betas, h_pairs=h_pairs,
+        rho=rho, tsb_betas=tsb_betas,
     )
 
 

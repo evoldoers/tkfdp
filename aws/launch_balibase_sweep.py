@@ -74,7 +74,7 @@ def active_job_count(prefix='balibase-'):
         return 0  # if sky jobs is broken assume no active
 
 
-def launch_pair(fam, i, j, dry_run=False, retry=0):
+def launch_pair(fam, i, j, dry_run=False, retry=0, yaml='aws/balibase_one_pair_v2.yaml'):
     """Submit one pair as a sky job. Returns the cmd list (for dry-run logging)."""
     name = f'balibase-{fam}-{i}-{j}-r{retry}'
     cmd = [
@@ -87,7 +87,7 @@ def launch_pair(fam, i, j, dry_run=False, retry=0):
         # --idle-minutes-to-autostop -- managed jobs auto-terminate
         # when the task exits.
         '-y',  # auto-confirm
-        'aws/balibase_one_pair_v2.yaml',
+        yaml,
     ]
     if dry_run:
         print('  WOULD RUN: ' + ' '.join(cmd))
@@ -106,6 +106,9 @@ def main():
                     help='Spot eviction retry budget per pair.')
     ap.add_argument('--poll-seconds', type=int, default=60,
                     help='Polling interval for the concurrency gate.')
+    ap.add_argument('--yaml', default='aws/balibase_one_pair_v2.yaml',
+                    help='Task YAML to launch (default: K=4 v2; use '
+                         'aws/balibase_one_pair_k8.yaml for the K=8 champion).')
     args = ap.parse_args()
 
     pairs = enumerate_pairs()
@@ -116,7 +119,7 @@ def main():
 
     if args.dry_run:
         for fam, i, j in pairs:
-            launch_pair(fam, i, j, dry_run=True)
+            launch_pair(fam, i, j, dry_run=True, yaml=args.yaml)
         return 0
 
     # LIVE submission.
@@ -124,7 +127,7 @@ def main():
     for fam, i, j in pairs:
         while active_job_count() >= args.concurrency:
             time.sleep(args.poll_seconds)
-        launch_pair(fam, i, j, dry_run=False)
+        launch_pair(fam, i, j, dry_run=False, yaml=args.yaml)
         submitted += 1
         print(f'  [{submitted}/{len(pairs)}] submitted {fam} ({i}, {j})')
         time.sleep(2)  # gentle on sky daemon

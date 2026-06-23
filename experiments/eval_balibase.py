@@ -203,7 +203,13 @@ def _get_pair_post(seqs, cache):
 
 def _get_boost_state(seqs, state, model_tag, cache):
     """Lazy-compute boost_states for a given model. Cached per model_tag
-    so coupled and coupled_b sharing the same model only build once."""
+    so coupled and coupled_b sharing the same model only build once.
+
+    pair_background='per_class' uses the canonical per-site-class pi for the
+    coupled-pair joint, matching the convention the v2 training pipeline
+    optimizes under. The library default is still 'lg08' for backward compat
+    with legacy v1 callers; we override here.
+    """
     boost_cache = cache.setdefault("boost_states_by_tag", {})
     if model_tag in boost_cache:
         return boost_cache[model_tag]
@@ -212,7 +218,8 @@ def _get_boost_state(seqs, state, model_tag, cache):
     names = list(seqs.keys())
     seqs_int = [np.asarray(seqs[nm]) for nm in names]
     pair_post_np = {k: np.asarray(v) for k, v in pair_post.items()}
-    bs = build_boost_state(pair_post_np, pair_taus, seqs_int, state)
+    bs = build_boost_state(pair_post_np, pair_taus, seqs_int, state,
+                              pair_background='per_class')
     boost_cache[model_tag] = bs
     return bs
 
@@ -731,9 +738,7 @@ def main():
                 state = load_minimal_state(path)
                 models.append((tag, state))
                 print(f"    K_c={state.K_c}, "
-                        f"K_H={state.potts_dp.atoms.shape[0]}, "
-                        f"side potentials="
-                        f"{'on' if state.potts_dp.h_pairs is not None else 'off'}")
+                        f"K_H={state.potts_dp.atoms.shape[0]}")
             except Exception as e:
                 print(f"    SKIP: {e}")
     if not models:

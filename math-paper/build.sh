@@ -21,7 +21,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 require_submodule() {
-    if [ ! -e tkf-mixdom/tkf/tkf.tex ]; then
+    if [ ! -e tkf-mixdom/tkf/preamble-shared.tex ]; then
         echo "ERROR: tkf-mixdom submodule not initialised." >&2
         echo "From ~/tkf-dp/: git submodule update --init --recursive" >&2
         exit 1

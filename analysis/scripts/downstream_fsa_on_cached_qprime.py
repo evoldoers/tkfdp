@@ -216,10 +216,17 @@ def main():
                     msa_f1s.append(2 * e_tp_pool / (total_mass_pool + gold_pool))
                 else:
                     msa_f1s.append(0.0)
+            # Also surface the LAST seed's per-family sufficient stats
+            # (e_tp_pool / total_mass_pool / gold_pool) so the corpus
+            # aggregator can compute a micro-pooled MSA F1 matching the
+            # paper's corpus_hard.micro convention.
             return {
                 'sp_per_seed': sps,
                 'tc_per_seed': tcs,
                 'msa_f1_per_seed': msa_f1s,
+                'last_seed_e_tp_pool': float(e_tp_pool),
+                'last_seed_total_mass_pool': float(total_mass_pool),
+                'last_seed_gold_pool': float(gold_pool),
                 'sp_mean': float(np.mean(sps)),
                 'sp_std': float(np.std(sps)),
                 'tc_mean': float(np.mean(tcs)),
@@ -248,6 +255,10 @@ def main():
                 corpus['gap1_msa_f1_sum'] = (
                     corpus.get('gap1_msa_f1_sum', 0.0) + r1['msa_f1_mean'])
                 corpus['msa_score_count'] += 1
+                # Micro-pool MSA F1 sufficient stats for corpus_hard.micro
+                corpus['gap1_e_tp'] = corpus.get('gap1_e_tp', 0.0) + r1['last_seed_e_tp_pool']
+                corpus['gap1_total_mass'] = corpus.get('gap1_total_mass', 0.0) + r1['last_seed_total_mass_pool']
+                corpus['gap1_gold'] = corpus.get('gap1_gold', 0.0) + r1['last_seed_gold_pool']
             except Exception as e:
                 fam_rec['msa_g1_err'] = f"{type(e).__name__}: {e}"
         if args.gap_factor_0:

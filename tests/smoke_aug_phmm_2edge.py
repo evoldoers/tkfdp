@@ -77,7 +77,7 @@ class FakeSVIState:
     potts_dp: object
 
 
-def make_state(K_c=1, with_h=False, H_scale=0.0, seed=0):
+def make_state(K_c=1, H_scale=0.0, seed=0):
     A_local = 20
     rng = np.random.default_rng(seed)
     pi_class = np.tile(np.asarray(PI_LG08), (K_c, 1))
@@ -87,10 +87,9 @@ def make_state(K_c=1, with_h=False, H_scale=0.0, seed=0):
     cp_idx, _ = canonical_pair_idx_table(K_c)
     assignments = np.asarray(cp_idx, dtype=np.int64)
     counts = np.ones(n_pairs, dtype=np.int64)
-    h_pairs = np.zeros((n_pairs, 2, A_local)) if with_h else None
     pdp = PottsDPState(
         K_c=K_c, A=A_local, atoms=atoms, assignments=assignments,
-        counts=counts, alpha_H=1.0, h_pairs=h_pairs,
+        counts=counts, alpha_H=1.0,
     )
     return FakeSVIState(K_c=K_c, A=A_local,
                         pi_class=pi_class, potts_dp=pdp)
@@ -177,7 +176,7 @@ def test2_eps_zero_collapse():
     t = 0.4
     L = 4
     x, y = make_test_pair(L=L, seed=2)
-    state = make_state(K_c=1, with_h=False, H_scale=0.3, seed=2)
+    state = make_state(K_c=1, H_scale=0.3, seed=2)
     bs = make_boost_state_for_pair(state, x, y, t)
 
     # Reference: standard pair-HMM Forward-Backward.
@@ -216,7 +215,7 @@ def test3_M_equals_1_collapse():
     t = 0.4
     L = 4
     x, y = make_test_pair(L=L, seed=3)
-    state = make_state(K_c=1, with_h=False, H_scale=0.0, seed=3)
+    state = make_state(K_c=1, H_scale=0.0, seed=3)
     bs = make_boost_state_for_pair(state, x, y, t)
 
     # Verify M_tensor is essentially 1.
@@ -307,7 +306,7 @@ def test4_brute_force_enumeration():
         else:
             y = np.asarray(y_override, dtype=np.int32)
             assert y.shape[0] == Ly
-        state = make_state(K_c=1, with_h=False, H_scale=H_scale, seed=seed)
+        state = make_state(K_c=1, H_scale=H_scale, seed=seed)
         bs = make_boost_state_for_pair(state, x, y, t)
 
         Q_dp, L_dp, Q_base_dp, log_F0_dp = aug_phmm_2edge_corrected_posterior(
@@ -337,7 +336,7 @@ def test5_one_edge_agreement():
     t = 0.4
     L = 4
     x, y = make_test_pair(L=L, seed=5)
-    state = make_state(K_c=1, with_h=False, H_scale=0.4, seed=5)
+    state = make_state(K_c=1, H_scale=0.4, seed=5)
     bs = make_boost_state_for_pair(state, x, y, t)
 
     # 2-edge and 1-edge at very large alpha_z:
@@ -366,7 +365,7 @@ def test6_padding_mask():
     x = rng.integers(0, 20, L).astype(np.int32)
     y = rng.integers(0, 20, L + 1).astype(np.int32)
     Lx, Ly = x.shape[0], y.shape[0]
-    state = make_state(K_c=1, with_h=False, H_scale=0.3, seed=6)
+    state = make_state(K_c=1, H_scale=0.3, seed=6)
     bs = make_boost_state_for_pair(state, x, y, t)
 
     Q_unp, L_unp, _, log_F0_unp = aug_phmm_2edge_corrected_posterior(
@@ -437,7 +436,7 @@ def smoke_BB11001(n_residues=12):
     print(f"  loaded {len(seqs)} sequences, lengths "
           f"{ {k: len(v) for k, v in seqs.items()} }")
 
-    state = make_state(K_c=1, with_h=False, H_scale=0.2, seed=11)
+    state = make_state(K_c=1, H_scale=0.2, seed=11)
     Q_lg, pi_lg = rate_matrix_lg()
 
     names = list(seqs.keys())

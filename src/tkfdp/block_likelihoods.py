@@ -363,12 +363,6 @@ def build_doublet_emission(state, t: float, *, eta: float = 1.0,
     K_c = pi_class.shape[0]
     atoms = np.asarray(state.potts_dp.atoms, dtype=np.float64)        # (K_H, A, A)
     assignments = np.asarray(state.potts_dp.assignments, dtype=np.int64)  # (K_c, K_c)
-    h_pairs = state.potts_dp.h_pairs
-    use_h = h_pairs is not None
-    if use_h:
-        h_pairs = np.asarray(h_pairs, dtype=np.float64)
-        from .potts_dp import canonical_pair_idx_table
-        cp_idx_np, cp_swap_np = canonical_pair_idx_table(K_c)
 
     if pi_c is None:
         pi_c = np.full(K_c, 1.0 / K_c)
@@ -397,13 +391,6 @@ def build_doublet_emission(state, t: float, *, eta: float = 1.0,
         for c2 in range(K_c):
             atom_idx = int(assignments[c1, c2])
             H = jnp.asarray(atoms[atom_idx])
-            if use_h:
-                k_can = int(cp_idx_np[c1, c2])
-                swap = int(cp_swap_np[c1, c2])
-                h_a_jnp = jnp.asarray(h_pairs[k_can, swap])
-                h_b_jnp = jnp.asarray(h_pairs[k_can, 1 - swap])
-            else:
-                h_a_jnp = h_b_jnp = None
 
             # Choose the stationary background for this (c1, c2) pair.
             if pair_background == 'lg08':
@@ -417,8 +404,7 @@ def build_doublet_emission(state, t: float, *, eta: float = 1.0,
 
             # Joint stationary at coupled site -- INDEPENDENT of rate
             # multipliers (they only scale Q, not pi_joint).
-            pij_flat = joint_stationary_pair(H, pi_a_jnp, pi_b_jnp,
-                                              h_a=h_a_jnp, h_b=h_b_jnp)
+            pij_flat = joint_stationary_pair(H, pi_a_jnp, pi_b_jnp)
             pij = np.asarray(pij_flat).reshape(A, A)        # (a, c)
 
             # Sum over (r_k1, r_k2) rate-pair bins. Each bin builds a
@@ -428,8 +414,7 @@ def build_doublet_emission(state, t: float, *, eta: float = 1.0,
             for (r1, r2) in rate_pairs:
                 Q_joint = build_joint_Q_pair(H, pi_a_jnp, pi_b_jnp,
                                               S=jnp.asarray(S_arr),
-                                              eta_pair=(r1, r2),
-                                              h_a=h_a_jnp, h_b=h_b_jnp)
+                                              eta_pair=(r1, r2))
                 P_flat = jsl.expm(Q_joint * t)
                 P_joint = np.asarray(P_flat).reshape(A, A, A, A)
                 out += pij_w * pij[:, :, None, None] * P_joint

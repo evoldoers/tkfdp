@@ -85,7 +85,7 @@ class FakeSVIState:
     potts_dp: object
 
 
-def make_state(K_c=1, with_h=False, H_scale=0.0, seed=0):
+def make_state(K_c=1, H_scale=0.0, seed=0):
     A_local = 20
     rng = np.random.default_rng(seed)
     pi_class = np.tile(np.asarray(PI_LG08), (K_c, 1))
@@ -95,10 +95,9 @@ def make_state(K_c=1, with_h=False, H_scale=0.0, seed=0):
     cp_idx, _ = canonical_pair_idx_table(K_c)
     assignments = np.asarray(cp_idx, dtype=np.int64)
     counts = np.ones(n_pairs, dtype=np.int64)
-    h_pairs = np.zeros((n_pairs, 2, A_local)) if with_h else None
     pdp = PottsDPState(
         K_c=K_c, A=A_local, atoms=atoms, assignments=assignments,
-        counts=counts, alpha_H=1.0, h_pairs=h_pairs,
+        counts=counts, alpha_H=1.0,
     )
     return FakeSVIState(K_c=K_c, A=A_local,
                         pi_class=pi_class, potts_dp=pdp)
@@ -147,7 +146,7 @@ def test_E5_tight_proposal_check():
     t = 0.4
     L = 5  # very small
     x, y = make_test_pair(L=L, seed=99)
-    state = make_state(K_c=1, with_h=False, H_scale=0.5, seed=99)
+    state = make_state(K_c=1, H_scale=0.5, seed=99)
     bs = make_boost_state_for_pair(state, x, y, t)
     setup = precompute_partial_forward(
         x, y, t, 0.02, 0.05, 0.5, Q_lg, pi_lg, bs,
@@ -272,7 +271,7 @@ def test_E4_detailed_balance_no_data():
     t = 0.4
     L = 5
     x, y = make_test_pair(L=L, seed=21)
-    state = make_state(K_c=1, with_h=False, H_scale=0.0, seed=21)
+    state = make_state(K_c=1, H_scale=0.0, seed=21)
     bs = make_boost_state_for_pair(state, x, y, t)
 
     # Sanity: M tensor at OBSERVED AAs should be ~1 with H=0.
@@ -577,7 +576,7 @@ def test_E3_brute_force():
         rng = np.random.default_rng(seed)
         x = rng.integers(0, 20, Lx).astype(np.int32)
         y = rng.integers(0, 20, Ly).astype(np.int32)
-        state = make_state(K_c=1, with_h=False, H_scale=H, seed=seed)
+        state = make_state(K_c=1, H_scale=H, seed=seed)
         bs = make_boost_state_for_pair(state, x, y, t)
         setup = precompute_partial_forward(
             x, y, t, 0.02, 0.05, 0.5, Q_lg, pi_lg, bs,
@@ -643,7 +642,7 @@ def test_E1_xval_aug_phmm():
     rng = np.random.default_rng(11)
     x = rng.integers(0, 20, Lx).astype(np.int32)
     y = rng.integers(0, 20, Ly).astype(np.int32)
-    state = make_state(K_c=1, with_h=False, H_scale=0.3, seed=11)
+    state = make_state(K_c=1, H_scale=0.3, seed=11)
     bs = make_boost_state_for_pair(state, x, y, t)
 
     alpha_z = 100.0  # eps=0.01; small enough that 1-edge truncation is OK
@@ -689,7 +688,7 @@ def test_E2_xval_aug_2edge_bounded():
     rng = np.random.default_rng(15)
     x = rng.integers(0, 20, Lx).astype(np.int32)
     y = rng.integers(0, 20, Ly).astype(np.int32)
-    state = make_state(K_c=1, with_h=False, H_scale=0.5, seed=15)
+    state = make_state(K_c=1, H_scale=0.5, seed=15)
     bs = make_boost_state_for_pair(state, x, y, t)
     alpha_z = 100.0  # eps = 0.01
 
@@ -735,7 +734,7 @@ def test_setup_performance():
         rng = np.random.default_rng(L * 91)
         x = rng.integers(0, 20, L).astype(np.int32)
         y = rng.integers(0, 20, L).astype(np.int32)
-        state = make_state(K_c=1, with_h=False, H_scale=0.3, seed=L)
+        state = make_state(K_c=1, H_scale=0.3, seed=L)
         bs = make_boost_state_for_pair(state, x, y, t)
         t0 = time.time()
         setup = precompute_partial_forward(
@@ -759,7 +758,7 @@ def test_sweep_performance():
         rng = np.random.default_rng(L * 71)
         x = rng.integers(0, 20, L).astype(np.int32)
         y = rng.integers(0, 20, L).astype(np.int32)
-        state = make_state(K_c=1, with_h=False, H_scale=0.3, seed=L * 7)
+        state = make_state(K_c=1, H_scale=0.3, seed=L * 7)
         bs = make_boost_state_for_pair(state, x, y, t)
         setup = precompute_partial_forward(
             x, y, t, 0.02, 0.05, 0.5, Q_lg, pi_lg, bs,

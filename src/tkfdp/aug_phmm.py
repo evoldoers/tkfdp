@@ -139,35 +139,19 @@ def build_M_tensor_classmarg(state, t: float,
     denom_aa = pi_times_P.mean(axis=0)                       # (A, A) -- uniform-class avg
 
     # --- numerator: class-marginal coupled-pair joint at time t ---
-    # P_joint[c, c', a, a', b, b'] = P((a, a') -> (b, b') | (c, c'), t,
-    #                                  Potts atom + side potentials)
+    # P_joint[c, c', a, a', b, b'] = P((a, a') -> (b, b') | (c, c'), t, Potts atom)
     P_joint_cp = np.asarray(build_per_classpair_joint_emit(
         state, float(t), S_arr))                              # (K, K, A, A, A, A)
-    # Per-class-pair joint stationary at coupled site:
     atoms = np.asarray(state.potts_dp.atoms, dtype=np.float64)
     assignments = np.asarray(state.potts_dp.assignments, dtype=np.int64)
-    h_pairs = state.potts_dp.h_pairs
-    use_h = h_pairs is not None
-    if use_h:
-        h_pairs = np.asarray(h_pairs, dtype=np.float64)
-        from .potts_dp import canonical_pair_idx_table
-        cp_idx_np, cp_swap_np = canonical_pair_idx_table(K_c)
 
     pi_joint_cp = np.zeros((K_c, K_c, A_local, A_local), dtype=np.float64)
     for c1 in range(K_c):
         for c2 in range(K_c):
             atom_idx = int(assignments[c1, c2])
             H = jnp.asarray(atoms[atom_idx])
-            if use_h:
-                k_can = int(cp_idx_np[c1, c2])
-                swap = int(cp_swap_np[c1, c2])
-                h_a = jnp.asarray(h_pairs[k_can, swap])  # noqa: F841
-                h_b = jnp.asarray(h_pairs[k_can, 1 - swap])  # noqa: F841
-            else:
-                h_a = h_b = None
             pij_flat = joint_stationary_pair(
-                H, jnp.asarray(pi_class[c1]), jnp.asarray(pi_class[c2]),
-                h_a=h_a, h_b=h_b)
+                H, jnp.asarray(pi_class[c1]), jnp.asarray(pi_class[c2]))
             pi_joint_cp[c1, c2] = np.asarray(pij_flat).reshape(
                 A_local, A_local)
 

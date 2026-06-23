@@ -151,6 +151,9 @@ def main():
                     help="If > 0, fixed top-K cells. If 0 (default), "
                     "dynamically pick N = the minimum prefix length such "
                     "that all Cys-Cys pairs are included.")
+    ap.add_argument("--no-cys-arcs", action="store_true",
+                    help="Suppress arcs/circles for Cys-Cys top-K pairs "
+                    "(only draw non-Cys-Cys pairs).")
     ap.add_argument("--__padding", type=int, default=0,
                     help="Number of brightest non-gappy cells to annotate "
                     "with circles + arcs. Default 15.")
@@ -676,6 +679,8 @@ def main():
     p_norm = PowerNorm(gamma=0.6, vmin=0.0, vmax=vmax)
     p_cmap = matplotlib.colormaps.get_cmap(args.cmap)
     for rank, (p, i, j) in enumerate(ranked):
+        if args.no_cys_arcs and i in cset and j in cset:
+            continue
         col = p_cmap(p_norm(p))
         # Circle on triangle at (j-1, i-1): note imshow has x=column, y=row.
         circ = mpatches.Circle((j - 1, i - 1), radius=1.5,

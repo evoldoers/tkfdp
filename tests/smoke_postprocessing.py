@@ -4,7 +4,7 @@ Verifies:
 - Module imports cleanly + runs end-to-end on a tiny synthetic state.
 - Boost is exactly zero (in log-space) when H = 0, consistent with the
   derivation: M = 1 everywhere when no Potts coupling is present.
-- Boost is finite (no NaN / inf) when H is non-trivial and h_pairs is set.
+- Boost is finite (no NaN / inf) when H is non-trivial.
 - Symmetry sanity: boost(i, j) is invariant under swap of (X, Y) when the
   trained Potts atom is symmetric and the same sequence is used on both
   sides.
@@ -22,11 +22,7 @@ jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 
 from tkfdp.lg08 import PI_LG08, S_LG08_F81
-from tkfdp.potts_dp import (
-    PottsDPState,
-    canonical_pair_idx_table,
-    canonical_pair_is_diag,
-)
+from tkfdp.potts_dp import PottsDPState, canonical_pair_idx_table
 from tkfdp.postprocessing import (
     build_per_class_match_emit,
     build_per_classpair_joint_emit,
@@ -44,10 +40,9 @@ class FakeSVIState:
     potts_dp: object
 
 
-def _make_synthetic_state(K_c: int, with_h: bool, H_scale: float):
+def _make_synthetic_state(K_c: int, H_scale: float):
     """Tiny synthetic state: tile LG08 pi across K_c classes, draw small
-    random Potts atoms (one per canonical class-pair), optionally set
-    h_pairs = 0."""
+    random Potts atoms (one per canonical class-pair)."""
     A = 20
     rng = np.random.default_rng(0)
     pi_class = np.tile(np.asarray(PI_LG08), (K_c, 1))
@@ -57,10 +52,9 @@ def _make_synthetic_state(K_c: int, with_h: bool, H_scale: float):
     cp_idx, _ = canonical_pair_idx_table(K_c)
     assignments = np.asarray(cp_idx, dtype=np.int64)
     counts = np.ones(n_pairs, dtype=np.int64)
-    h_pairs = np.zeros((n_pairs, 2, A)) if with_h else None
     pdp = PottsDPState(
         K_c=K_c, A=A, atoms=atoms, assignments=assignments,
-        counts=counts, alpha_H=1.0, h_pairs=h_pairs,
+        counts=counts, alpha_H=1.0,
     )
     return FakeSVIState(K_c=K_c, A=A, pi_class=pi_class, potts_dp=pdp)
 
@@ -75,7 +69,7 @@ def main() -> int:
     t = 0.4
 
     # 1. H = 0 baseline: boost should be all-zero in log-space.
-    state0 = _make_synthetic_state(K_c, with_h=False, H_scale=0.0)
+    state0 = _make_synthetic_state(K_c, H_scale=0.0)
     Q_baseline = jnp.asarray(rng.uniform(0.0, 0.3, (L_X, L_Y)))
 
     log_boost0 = correct_pair_posterior(
@@ -89,35 +83,21 @@ def main() -> int:
     assert np.max(np.abs(log_boost0_np)) < 1e-8, \
         "H=0 should give exactly zero log-boost (M = 1)"
 
-    # 2. Non-trivial H, side potentials disabled: boost should be finite +
-    #    deviate from zero.
-    state1 = _make_synthetic_state(K_c, with_h=False, H_scale=0.3)
+    # 2. Non-trivial H: boost should be finite + deviate from zero.
+    state1 = _make_synthetic_state(K_c, H_scale=0.3)
     log_boost1 = correct_pair_posterior(
         np.asarray(Q_baseline), x_seq, y_seq, t,
         state1, alpha_z=100.0, return_boost=True,
     )
     log_boost1_np = np.asarray(log_boost1)
-    print(f"[H!=0,h=0] max |log_boost|     = {np.max(np.abs(log_boost1_np)):.3e}")
+    print(f"[H!=0]     max |log_boost|     = {np.max(np.abs(log_boost1_np)):.3e}")
     print(f"           mean log_boost       = {np.mean(log_boost1_np):.3e}")
     print(f"           std  log_boost       = {np.std(log_boost1_np):.3e}")
     assert np.all(np.isfinite(log_boost1_np)), "non-trivial H produced NaN"
 
-    # 3. Side potentials enabled (h_pairs initialized to zero — should give
-    #    same result as case 2 since h=0 doesn't change the joint).
-    state2 = _make_synthetic_state(K_c, with_h=True, H_scale=0.3)
-    state2.potts_dp.atoms = state1.potts_dp.atoms             # share atoms
-    log_boost2 = correct_pair_posterior(
-        np.asarray(Q_baseline), x_seq, y_seq, t,
-        state2, alpha_z=100.0, return_boost=True,
-    )
-    log_boost2_np = np.asarray(log_boost2)
-    diff = np.max(np.abs(log_boost1_np - log_boost2_np))
-    print(f"[h_pairs=0] max diff vs h=None  = {diff:.3e}  (should be ~ 0)")
-    assert diff < 1e-10, "h_pairs=0 should be equivalent to h=None"
-
-    # 4. alpha_z scaling: doubling alpha_z should approximately halve the
+    # 3. alpha_z scaling: doubling alpha_z should approximately halve the
     #    log-boost magnitude (for moderate boost where eps*delta is small).
-    state3 = _make_synthetic_state(K_c, with_h=False, H_scale=0.3)
+    state3 = _make_synthetic_state(K_c, H_scale=0.3)
     log_boost3a = correct_pair_posterior(
         np.asarray(Q_baseline), x_seq, y_seq, t,
         state3, alpha_z=100.0, return_boost=True,

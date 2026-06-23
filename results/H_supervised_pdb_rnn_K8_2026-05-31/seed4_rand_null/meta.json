@@ -1,0 +1,21 @@
+{
+  "source_ckpt": "/home/yam/tkf-dp/results/_preserved/K8_KH1_top8000_iter68/state.npz",
+  "contacts_file": "results/H_supervised_pdb_rnn_K8_2026-05-31/contacts.npz",
+  "K_c": 8,
+  "A": 20,
+  "n_pairs": 72601,
+  "n_cherries": 2249327,
+  "n_em_iters": 25,
+  "n_mstep_iters": 30,
+  "lr": 0.02,
+  "prior_tau": 0.1,
+  "seed": 4,
+  "warm_start": false,
+  "init_w_un": 0.5,
+  "final_w_un": 0.45712815690685177,
+  "beta_a": 1.0,
+  "beta_b": 1.0,
+  "final_marg_loglik": -5102600.909851372,
+  "final_norm_H": 6.517685438712025,
+  "final_mean_gamma_un": 0.45712815690685177
+}

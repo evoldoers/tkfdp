@@ -119,6 +119,15 @@ def main():
                          "K=4 substitution-trained checkpoint seed a run on a "
                          "different corpus (e.g. the PDB-anchored subset). "
                          "Mutually exclusive with --resume-from.")
+    ap.add_argument("--reset-val-tracking", action="store_true",
+                    help="On --resume-from, discard the carried-over "
+                         "best_val_LL / best_iter / n_evals_since_improvement. "
+                         "Use this when the val protocol has changed between "
+                         "the original training and the resume (different "
+                         "--val-families, --val-burnin, --val-samples, or "
+                         "loss code), so that early-stop compares apples to "
+                         "apples instead of comparing new val_LLs against "
+                         "an incomparable old best.")
     ap.add_argument("--val-families", type=str, default="",
                     help="Comma-separated held-out family IDs for periodic val "
                          "log-likelihood. Empty = no val LL = no early stop.")
@@ -159,18 +168,6 @@ def main():
                          "an active cap for K_c >= 5). When < K_c(K_c+1)/2, "
                          "class-pairs are round-robin assigned to atoms at "
                          "init; TSB resampling specializes.")
-    ap.add_argument("--use-side-potentials", action="store_true",
-                    help="Add per-class-pair singleton side-potential "
-                         "vectors h_a, h_b ~ N(0, h_prior_tau^-1) per AA, "
-                         "MAP-fit alongside H atoms via Adam; self-pairs "
-                         "(c, c) tied h_a = h_b for joint-Q reversibility. "
-                         "See main.tex Remark 'Per-class-pair side "
-                         "potentials'. Adds ~K_c(K_c+1)/2 x 2 x A params "
-                         "per atom and roughly doubles the per-Adam-step "
-                         "cost; OFF by default.")
-    ap.add_argument("--h-prior-tau", type=float, default=4.0,
-                    help="Gaussian-prior precision for the per-class-pair "
-                         "side-potential vectors h_a, h_b (centered at zero).")
     ap.add_argument("--n-tau", type=int, default=50,
                     help="Number of geometric-spaced tau bins for log_P "
                          "caching. Geomspace gives fine resolution at small t "
@@ -248,7 +245,6 @@ def main():
     state = init_svi_state(per_family_data, K_c=args.K,
                               init_pair_fraction=args.init_pair_fraction,
                               K_H_max=args.K_H_max,
-                              use_side_potentials=args.use_side_potentials,
                               rng=rng)
 
     # Anchor support: load PDB contacts for the requested families and
@@ -374,8 +370,17 @@ def main():
         state = loaded_state
         rng = loaded_rng
         it_start = int(meta["iter"])
-        print(f"Resumed from {args.resume_from}: iter={it_start}, "
-                f"best_val_LL={es.best_val_LL:.2f} (best_iter={es.best_iter})")
+        if args.reset_val_tracking:
+            es = EarlyStoppingState()
+            # Drop the carried val_LL trace too so a future plot doesn't splice
+            # old-protocol numbers against new-protocol numbers.
+            if trace_loaded is not None and "val_LL" in trace_loaded:
+                trace_loaded["val_LL"] = []
+            print(f"Resumed from {args.resume_from}: iter={it_start}, "
+                    f"early-stop tracking RESET (--reset-val-tracking)")
+        else:
+            print(f"Resumed from {args.resume_from}: iter={it_start}, "
+                    f"best_val_LL={es.best_val_LL:.2f} (best_iter={es.best_iter})")
 
     # Validation families (held-out) for periodic val LL + early stopping.
     val_fcs = []
@@ -466,12 +471,29 @@ def main():
             both_aa = fd['both_aa']
 
             def make_pair_fn(fd=fd, tau_idx=tau_idx, both_aa=both_aa, st=st):
-                # Vectorized version: for column s, compute pair_lik[k_s, k_t, t]
-                # for all t in one fancy-indexed gather over cherries.
-                # Eliminates the cherry x K_c x K_c Python loop that dominated
-                # the partition-Gibbs sweep cost (~80 s/outer at K_c=4, 50 fam).
+                # Per-call vectorised pair_fn with PARTIAL-OVERLAP COMPOSITE
+                # LIKELIHOOD. For each candidate partner t of column s:
+                #
+                #   pair_LL[k_s, k_t, t] = sum over cherries c of {
+                #       log P_joint  if both s, t valid in c   (already in OLD)
+                #       log P_single[k_s] if only s valid in c (NEW: partial)
+                #       log P_single[k_t] if only t valid in c (NEW: partial)
+                #       0  if neither valid
+                #   }
+                #
+                # Without the NEW partial terms the partition Gibbs spuriously
+                # prefers pairing data-less / sparse-overlap columns because
+                # the empty-sum pair score (=0) looks artificially neutral
+                # against negative singleton evidence. We add them inline
+                # rather than precomputing a (L, L, K_c, K_c) tensor up front:
+                # the precompute amortises in val (100+ Gibbs sweeps per
+                # call) but NOT in training (~1 sweep per outer), and the
+                # (L, L) intermediate scatters were thrashing cache for
+                # large MSAs (~34 s/MSA at K_c=8 L=927).
                 aa_a_full = fd['aa_a'].astype(np.int64)   # (C, L)
                 aa_b_full = fd['aa_b'].astype(np.int64)
+                aa_a_safe_full = np.minimum(aa_a_full, 19)
+                aa_b_safe_full = np.minimum(aa_b_full, 19)
                 ba = both_aa                              # (C, L) bool
                 K_c = state.K_c
 
@@ -479,31 +501,53 @@ def main():
                     L = fd['L']
                     out = np.zeros((K_c, K_c, L), dtype=np.float64)
                     valid_s_mask = ba[:, s]
-                    if not valid_s_mask.any():
-                        return out
-                    valid_idx = np.flatnonzero(valid_s_mask)   # (M_v,) cherry indices
-                    a_s_v = aa_a_full[valid_idx, s]            # (M_v,)
-                    b_s_v = aa_b_full[valid_idx, s]
-                    aa_a_v = aa_a_full[valid_idx, :]           # (M_v, L)
-                    aa_b_v = aa_b_full[valid_idx, :]
-                    ti_v = tau_idx[valid_idx]                  # (M_v,)
-                    valid_t_mask = ba[valid_idx, :].astype(np.float64)  # (M_v, L)
-                    # Clip gap AAs (encoded as 20) to a safe in-range value
-                    # so the joint-state-index gather doesn't IndexError.
-                    # The valid_t_mask zeroes out their contribution anyway.
-                    aa_a_v_safe = np.minimum(aa_a_v, 19)
-                    aa_b_v_safe = np.minimum(aa_b_v, 19)
-                    # Joint state indices per (cherry, t):
-                    start_idx = a_s_v[:, None] * 20 + aa_a_v_safe   # (M_v, L)
-                    end_idx = b_s_v[:, None] * 20 + aa_b_v_safe
-                    # Gather log_P_cache[k_s, k_t, ti_v[:, None], start_idx, end_idx]
-                    # via numpy fancy indexing for each (k_s, k_t).
-                    for k_s in range(K_c):
-                        for k_t in range(K_c):
-                            P = log_P_cache[k_s, k_t]          # (n_t, A^2, A^2)
-                            log_p_v = P[ti_v[:, None], start_idx, end_idx]  # (M_v, L)
-                            log_p_v = log_p_v * valid_t_mask
-                            out[k_s, k_t, :] = log_p_v.sum(axis=0)
+
+                    # === Case A: cherries with s valid ===
+                    if valid_s_mask.any():
+                        v_idx = np.flatnonzero(valid_s_mask)        # (M_v,)
+                        a_s_v = aa_a_full[v_idx, s]
+                        b_s_v = aa_b_full[v_idx, s]
+                        aa_a_v_safe = aa_a_safe_full[v_idx, :]      # (M_v, L)
+                        aa_b_v_safe = aa_b_safe_full[v_idx, :]
+                        ti_v = tau_idx[v_idx]
+                        vt_mask = ba[v_idx, :].astype(np.float64)   # (M_v, L)
+                        inv_t = 1.0 - vt_mask                        # (M_v, L)
+
+                        # A.1: joint pair LL on cherries where both s, t valid
+                        start_idx = a_s_v[:, None] * 20 + aa_a_v_safe
+                        end_idx   = b_s_v[:, None] * 20 + aa_b_v_safe
+                        for k_s in range(K_c):
+                            for k_t in range(K_c):
+                                P = log_P_cache[k_s, k_t]
+                                log_p_v = P[ti_v[:, None], start_idx, end_idx]
+                                out[k_s, k_t, :] += (log_p_v * vt_mask).sum(axis=0)
+
+                        # A.2: only s valid (t not valid) -> log_P_single[k_s]
+                        # at (ti_v, a_s_v, b_s_v); independent of k_t and t.
+                        # Sum over cherries weighted by inv_t[m, t] gives a
+                        # (K_c, L) tensor, broadcast over k_t in 'out'.
+                        for k_s in range(K_c):
+                            sing_vals = log_P_single_cache[k_s, ti_v, a_s_v, b_s_v]  # (M_v,)
+                            contrib = sing_vals @ inv_t                                 # (L,)
+                            out[k_s, :, :] += contrib[None, :]
+
+                    # === Case B: cherries with s NOT valid but t valid ===
+                    # Add log_P_single[k_t, ti, a_t, b_t] for those cherries.
+                    inv_s_cherries = np.flatnonzero(~valid_s_mask)
+                    if len(inv_s_cherries) > 0:
+                        vt_invs = ba[inv_s_cherries, :].astype(np.float64)   # (C_invs, L)
+                        if vt_invs.any():
+                            ti_invs = tau_idx[inv_s_cherries]
+                            aa_a_invs = aa_a_safe_full[inv_s_cherries, :]    # (C_invs, L)
+                            aa_b_invs = aa_b_safe_full[inv_s_cherries, :]
+                            for k_t in range(K_c):
+                                # log_P_single[k_t, ti_invs[m], a_invs[m, t], b_invs[m, t]]
+                                gathered = log_P_single_cache[k_t,
+                                                                  ti_invs[:, None],
+                                                                  aa_a_invs,
+                                                                  aa_b_invs]      # (C_invs, L)
+                                contrib = (gathered * vt_invs).sum(axis=0)       # (L,)
+                                out[:, k_t, :] += contrib[None, :]
                     return out
                 return pair_fn
 
@@ -575,7 +619,6 @@ def main():
                 mu_prior, tau_prior,
                 n_steps=args.n_laplace_steps, lr=0.05,
                 loss_kind=("elbo" if args.use_elbo else "exact"),
-                h_prior_tau=args.h_prior_tau,
             )
         except Exception as e:
             print(f"  WARN: atom-Laplace update failed: {e}")
@@ -628,10 +671,18 @@ def main():
 
         # Periodic val LL + early stopping
         if val_fcs and (it + 1) % args.val_every == 0:
-            from tkfdp.val_loglik_v2 import val_log_likelihood
+            from tkfdp.val_loglik_v2 import val_log_likelihood_class_marginal
             t_val0 = time.time()
-            val_score, _ = val_log_likelihood(
-                state, val_fcs,
+            # Empirical pi_c from current per-MSA cls assignments.
+            cls_counts = np.zeros(args.K, dtype=np.float64)
+            for st in state.states_per_msa:
+                for c in range(args.K):
+                    cls_counts[c] += float((st.cls == c).sum())
+            total_cls = float(cls_counts.sum())
+            pi_c_now = (cls_counts / total_cls if total_cls > 0
+                          else np.full(args.K, 1.0 / args.K))
+            val_score, _ = val_log_likelihood_class_marginal(
+                state, val_fcs, pi_c=pi_c_now,
                 n_burnin=args.val_burnin, n_samples=args.val_samples,
                 seed=args.seed + it,
             )

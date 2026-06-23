@@ -68,12 +68,7 @@ def save_checkpoint(state: SVIState, trace: dict, rng: np.random.Generator,
         potts_assignments=state.potts_dp.assignments.astype(np.int64),
         potts_counts=state.potts_dp.counts.astype(np.int64),
     )
-    # Side potentials (optional). When training has the side-potential
-    # extension enabled, h_pairs is a (K_c(K_c+1)/2, 2, A) tensor; old
-    # checkpoints written before this branch existed simply omit the key.
-    if state.potts_dp.h_pairs is not None:
-        arrs["h_pairs"] = state.potts_dp.h_pairs.astype(np.float64)
-    # TSB extension state (optional, similarly).
+    # TSB extension state (optional, present in current checkpoints).
     if state.potts_dp.rho is not None:
         arrs["rho"] = state.potts_dp.rho.astype(np.float64)
     if state.potts_dp.tsb_betas is not None:
@@ -143,13 +138,19 @@ def load_checkpoint(chkpt_dir: Path, per_family_data: list,
     pi_class = np.asarray(arrs["pi_class"])
     A = pi_class.shape[1]
 
-    # Optional fields (h_pairs / rho / tsb_betas) absent from older
-    # checkpoints. np.array (not asarray) to make sure these are
-    # writable -- the in-place symmetrize_h_pairs_diag projection in
-    # update_potts_atoms_jit needs to mutate h_pairs.
-    h_pairs = np.array(arrs["h_pairs"]) if "h_pairs" in arrs.files else None
+    # Optional TSB fields (absent from older checkpoints).
     rho = np.array(arrs["rho"]) if "rho" in arrs.files else None
     tsb_betas = np.array(arrs["tsb_betas"]) if "tsb_betas" in arrs.files else None
+    # Legacy side-potential checkpoints: tolerate an h_pairs key only if it's
+    # None / all-zero (defunct slot). A populated h_pairs means the checkpoint
+    # was trained with the now-removed --use-side-potentials path.
+    if "h_pairs" in arrs.files:
+        h_arr = np.asarray(arrs["h_pairs"])
+        if h_arr.size > 0 and np.any(h_arr != 0):
+            raise ValueError(
+                f"Checkpoint at {chkpt_dir} contains non-zero h_pairs "
+                f"(side potentials), which have been removed from the model. "
+                f"Retrain without --use-side-potentials.")
 
     potts_dp = PottsDPState(
         K_c=K_c, A=A,
@@ -158,7 +159,7 @@ def load_checkpoint(chkpt_dir: Path, per_family_data: list,
         counts=np.asarray(arrs["potts_counts"]),
         alpha_H=float(meta["alpha_H"]),
         mu_prior=mu_prior, tau_prior=tau_prior,
-        h_pairs=h_pairs, rho=rho, tsb_betas=tsb_betas,
+        rho=rho, tsb_betas=tsb_betas,
     )
 
     states_per_msa: list[FamilyKState] = []
@@ -214,18 +215,23 @@ def load_globals_from_checkpoint(chkpt_dir: Path, mu_prior: np.ndarray,
     A = pi_class.shape[1]
     atoms = np.asarray(arrs["potts_atoms"])
     K_H_max = int(atoms.shape[0])
-    h_pairs = np.array(arrs["h_pairs"]) if "h_pairs" in arrs.files else None
     rho = np.array(arrs["rho"]) if "rho" in arrs.files else None
     tsb_betas = (np.array(arrs["tsb_betas"]) if "tsb_betas" in arrs.files
                  else None)
-    # Older checkpoints (pre-h_pairs/rho/tsb_betas persistence fix) lack
-    # these fields. Fall back to the uniform init that init_svi_state
-    # uses for fresh runs — otherwise TSB resampling trips on a None
-    # several outer iters in.
+    # Older checkpoints (pre-rho/tsb_betas persistence fix) lack these fields.
+    # Fall back to the uniform init that init_svi_state uses for fresh runs —
+    # otherwise TSB resampling trips on a None several outer iters in.
     if rho is None:
         rho = np.full(K_H_max, 1.0 / K_H_max)
     if tsb_betas is None and K_H_max > 1:
         tsb_betas = np.full(K_H_max - 1, 1.0 / K_H_max)
+    if "h_pairs" in arrs.files:
+        h_arr = np.asarray(arrs["h_pairs"])
+        if h_arr.size > 0 and np.any(h_arr != 0):
+            raise ValueError(
+                f"Checkpoint at {chkpt_dir} contains non-zero h_pairs "
+                f"(side potentials), which have been removed from the model. "
+                f"Retrain without --use-side-potentials.")
     potts_dp = PottsDPState(
         K_c=K_c, A=A,
         atoms=atoms,
@@ -233,7 +239,7 @@ def load_globals_from_checkpoint(chkpt_dir: Path, mu_prior: np.ndarray,
         counts=np.asarray(arrs["potts_counts"]),
         alpha_H=float(meta["alpha_H"]),
         mu_prior=mu_prior, tau_prior=tau_prior,
-        h_pairs=h_pairs, rho=rho, tsb_betas=tsb_betas,
+        rho=rho, tsb_betas=tsb_betas,
     )
     return pi_class, potts_dp, meta
 

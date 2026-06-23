@@ -78,6 +78,11 @@ to populate it. Same content available at $STAGING/tkf-mixdom/.
 EOF
 
 # ============== tkf-mixdom ==============
+# Ship only the supporting library + the shared LaTeX fragments that the
+# TKF-DP supplement includes. The standalone papers (tkf.tex = Maraschino,
+# mixdom.tex = MixDom) and the removed WFST appendix are NOT staged across,
+# so evoldoers/tkf-mixdom stays a supporting repo for evoldoers/tkfdp
+# rather than a half-finished-paper repo.
 rsync -a --delete --delete-excluded "${RSYNC_COMMON_EXCL[@]}" \
   --exclude='python/tests/' \
   --exclude='misc/' \
@@ -86,6 +91,8 @@ rsync -a --delete --delete-excluded "${RSYNC_COMMON_EXCL[@]}" \
   --exclude='python/tkfmixdom.egg-info/' \
   --exclude='data/' \
   --exclude='CLAUDE.md' \
+  --exclude='tkf/tkf.tex' --exclude='tkf/mixdom.tex' \
+  --exclude='tkf/mixdom-wfst.tex' --exclude='tkf/build.sh' \
   --exclude='python/experiments/AUTONOMOUS_PLAN.md' \
   --exclude='scripts/aws_resumption.md' \
   "$SRC_TKF_MIXDOM/" "$STAGING/tkf-mixdom/"

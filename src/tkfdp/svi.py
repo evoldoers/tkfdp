@@ -56,7 +56,6 @@ from scipy.special import gammaln
 
 from .eta_site import (hr_per_cherry, negative_binomial_log_marginal,
                         per_column_sufficient_stats, posterior_eta_mean)
-from .generator import build_joint_Q, joint_stationary, symmetrize_eigh
 from .lg08 import PI_LG08, S_LG08_F81
 from .partition_K import FamilyKState, init_random_K
 from .potts_dp import PottsDPState, alpha_H_map_update, init_potts_dp
@@ -473,7 +472,6 @@ def em_warmup_site_classes(state: SVIState, per_family_data: list,
 def init_svi_state(per_family_data: list, K_c: int, A: int = 20,
                     init_pair_fraction: float = 0.0,
                     K_H_max: int | None = None,
-                    use_side_potentials: bool = False,
                     rng: Optional[np.random.Generator] = None) -> SVIState:
     """Initialize SVIState: per-class pi at LG08, per-site eta at 1,
     random class assignments, optional random pair init for partition,
@@ -489,14 +487,10 @@ def init_svi_state(per_family_data: list, K_c: int, A: int = 20,
         states.append(st)
         etas.append(np.ones(L))
     mu_prior = np.zeros((A, A)); tau_prior = np.full((A, A), 4.0)
-    # TSB: K_H_max = K_c(K_c+1)/2 atoms always allocated (truncated stick-
-    # breaking). Symmetric with the site-class TSB; replaces the CRP-Gibbs
-    # variant (init_potts_dp) which was sticky on the low-K side.
     from .potts_dp import init_potts_tsb
     potts_dp = init_potts_tsb(K_c=K_c, alpha_H=1.0, mu_prior=mu_prior,
                                 tau_prior=tau_prior, rng=rng,
-                                K_H_max=K_H_max,
-                                use_side_potentials=use_side_potentials)
+                                K_H_max=K_H_max)
     return SVIState(K_c=K_c, A=A, pi_class=pi_class, potts_dp=potts_dp,
                     states_per_msa=states, eta_per_msa=etas)
 
@@ -582,6 +576,12 @@ def build_log_P_cache_K_atoms(state: SVIState, unique_t: np.ndarray,
     pair (c_s, c_t) and time. The H atom for each class pair is looked
     up via state.potts_dp.assignments[c_s, c_t]. Per-class pi is
     state.pi_class[c].
+
+    Stored as float32 to halve memory (3.3 GB -> 1.6 GB at K_c=16,
+    n_t=10). Per-cherry log-likelihood accumulation in _precompute_pair_LL
+    upcasts to float64 for stability, so the only effective loss is
+    ~7-digit precision on each transition log-probability — well below
+    the per-cherry MCMC noise floor.
     """
     from .generator import (build_joint_Q_pair, joint_stationary_pair,
                               symmetrize_eigh, log_transition_matrices)
@@ -589,29 +589,17 @@ def build_log_P_cache_K_atoms(state: SVIState, unique_t: np.ndarray,
     K_c = state.K_c
     A2 = state.A * state.A
     n_t = len(unique_t)
-    log_P = np.zeros((K_c, K_c, n_t, A2, A2), dtype=np.float64)
+    log_P = np.zeros((K_c, K_c, n_t, A2, A2), dtype=np.float32)
     unique_t_j = jnp.asarray(unique_t)
     S_j = jnp.asarray(S)
-    use_h = state.potts_dp.h_pairs is not None
-    if use_h:
-        from .potts_dp import canonical_pair_idx_table
-        cp_idx_np, cp_swap_np = canonical_pair_idx_table(K_c)
     for c1 in range(K_c):
         pi1 = jnp.asarray(state.pi_class[c1])
         for c2 in range(K_c):
             pi2 = jnp.asarray(state.pi_class[c2])
             atom_idx = int(state.potts_dp.assignments[c1, c2])
             H = jnp.asarray(state.potts_dp.atoms[atom_idx])
-            if use_h:
-                k = int(cp_idx_np[c1, c2])
-                swap = int(cp_swap_np[c1, c2])
-                h_a = jnp.asarray(state.potts_dp.h_pairs[k, swap])
-                h_b = jnp.asarray(state.potts_dp.h_pairs[k, 1 - swap])
-                Q = build_joint_Q_pair(H, pi1, pi2, S=S_j, h_a=h_a, h_b=h_b)
-                pi_j = joint_stationary_pair(H, pi1, pi2, h_a=h_a, h_b=h_b)
-            else:
-                Q = build_joint_Q_pair(H, pi1, pi2, S=S_j)
-                pi_j = joint_stationary_pair(H, pi1, pi2)
+            Q = build_joint_Q_pair(H, pi1, pi2, S=S_j)
+            pi_j = joint_stationary_pair(H, pi1, pi2)
             Lambda, U_sym, sqrt_pij = symmetrize_eigh(Q, pi_j)
             log_P_h = log_transition_matrices(unique_t_j, Lambda, U_sym, sqrt_pij)
             log_P[c1, c2] = np.asarray(log_P_h)
@@ -700,7 +688,21 @@ def potts_tsb_sweep(state: SVIState, per_family_data: list,
 
     Stays internally consistent for both `loss_kind="exact"` and
     `loss_kind="elbo"` (the two variants of `existing_atom_log_lik`).
+
+    Short-circuit at K_H_max=1: with only one atom to pick, the
+    Categorical(rho * lik) resample over atom slots is degenerate —
+    every class-pair must be assigned to atom 0. The whole loop
+    (K_c(K_c+1)/2 outer obs gathers × K_H=1 existing_atom_log_lik
+    calls, each of which is K_c²-scaling inside via the vmap over
+    class-pairs) is wasted work whose only output is unused, and the
+    JAX transient allocations along the K_c⁴ inner expansion are
+    plausibly what triggered the K=16 OOM. Skip entirely when there's
+    nothing to sample.
     """
+    K_H_max = state.potts_dp.atoms.shape[0]
+    if K_H_max == 1:
+        return state
+
     if loss_kind == "exact":
         from .laplace_potts_v2 import existing_atom_log_lik, pad_obs
     elif loss_kind == "elbo":
@@ -712,7 +714,6 @@ def potts_tsb_sweep(state: SVIState, per_family_data: list,
     from .potts_dp import (_class_pair_idx, tsb_resample_assignments,
                                 tsb_update_rho)
     K_c = state.K_c
-    K_H_max = state.potts_dp.atoms.shape[0]
     cp_table, pairs = _class_pair_idx(K_c)
 
     # Pre-gather per-(c, c') padded obs.
@@ -730,19 +731,6 @@ def potts_tsb_sweep(state: SVIState, per_family_data: list,
     S_j = jnp.asarray(S)
     t_j = jnp.asarray(unique_t)
 
-    # When side-potentials are active, build per-(c1, c2) h_a_table /
-    # h_b_table from h_pairs once. existing_atom_log_lik takes them as
-    # optional args; per-class-pair scoring routes through these.
-    h_a_table_j = h_b_table_j = None
-    if state.potts_dp.h_pairs is not None:
-        from .potts_dp import canonical_pair_idx_table
-        cp_idx_np, cp_swap_np = canonical_pair_idx_table(K_c)
-        cp_idx_j = jnp.asarray(cp_idx_np)
-        cp_swap_j = jnp.asarray(cp_swap_np)
-        h_pairs_j = jnp.asarray(state.potts_dp.h_pairs)
-        h_a_table_j = h_pairs_j[cp_idx_j, cp_swap_j]
-        h_b_table_j = h_pairs_j[cp_idx_j, 1 - cp_swap_j]
-
     # log_lik[h, c, c'] = sum-log-likelihood of class-pair (c, c')'s obs
     # under atom h, with class-pair pi (pi_class[c], pi_class[c']).
     log_lik = np.zeros((K_H_max, K_c, K_c), dtype=np.float64)
@@ -756,7 +744,6 @@ def potts_tsb_sweep(state: SVIState, per_family_data: list,
             ll = float(existing_atom_log_lik(
                 jnp.asarray(state.potts_dp.atoms[h]),
                 obs_j, mask_j, pi_j, S_j, t_j,
-                h_a_table=h_a_table_j, h_b_table=h_b_table_j,
             ))
             log_lik[h, c, cp] = ll
             log_lik[h, cp, c] = ll
@@ -790,7 +777,15 @@ def potts_dp_crp_sweep(state: SVIState, per_family_data: list,
 
     Padding to M_max keeps the JAX trace cached across class-pairs
     within one sweep.
+
+    Short-circuit at K_H_max=1: with only one atom and no new-atom
+    branch worth proposing (alpha_H * marg_new vs n_existing *
+    marg_existing would always pick the existing one without K_c²
+    of new evidence), the entire sweep is wasted work. Skip.
     """
+    if state.potts_dp.atoms.shape[0] == 1:
+        return state
+
     if loss_kind == "exact":
         from .laplace_potts_v2 import (existing_atom_log_lik,
                                            laplace_component_diag_jit,
@@ -871,8 +866,7 @@ def update_potts_atoms_jit(state: SVIState, per_family_data: list,
                               S: np.ndarray, mu_prior: np.ndarray,
                               tau_prior: np.ndarray,
                               n_steps: int = 30, lr: float = 0.05,
-                              loss_kind: str = "exact",
-                              h_prior_tau: float = 4.0) -> SVIState:
+                              loss_kind: str = "exact") -> SVIState:
     """JIT-hoisted version: per-atom Adam MAP.
 
     `loss_kind` selects the gradient routine:
@@ -933,30 +927,6 @@ def update_potts_atoms_jit(state: SVIState, per_family_data: list,
     t_j = jnp.asarray(unique_t)
     optimizer = optax.adam(lr)
 
-    use_h = state.potts_dp.h_pairs is not None
-    if use_h:
-        # Joint Adam over (H_flat, h_pairs) when side potentials enabled.
-        from .potts_dp import (canonical_pair_idx_table,
-                                  canonical_pair_is_diag,
-                                  symmetrize_h_pairs_diag)
-        from .laplace_potts_v2 import grad_fn_with_h
-        cp_idx_np, cp_swap_np = canonical_pair_idx_table(K_c)
-        cp_idx_j = jnp.asarray(cp_idx_np)
-        cp_swap_j = jnp.asarray(cp_swap_np)
-        is_diag_pair_j = jnp.asarray(canonical_pair_is_diag(K_c))
-        # Defensive: ensure h_pairs respects the self-pair tying invariant
-        # before we hand it to the JIT'd Adam loop. (It is also re-enforced
-        # at the end of the sweep via symmetrize_h_pairs_diag.)
-        symmetrize_h_pairs_diag(state.potts_dp.h_pairs, K_c)
-        h_pairs_j = jnp.asarray(state.potts_dp.h_pairs)
-        # Each atom's Adam loop sees 1/K_H of the total Gaussian prior on
-        # h_pairs (so summed across all K_H atom calls, the full prior is
-        # applied once). Approximate but simple; overcounts on h_pairs that
-        # aren't owned by this atom (gradient on them is zero so the prior
-        # pull is shared by all K_H atoms equally — net effect over a sweep
-        # is single-counted prior on each h_pair).
-        h_share = 1.0 / max(K_H, 1)
-
     new_atoms = []
     for h in range(K_H):
         po = atom_obs_list[h]
@@ -966,37 +936,13 @@ def update_potts_atoms_jit(state: SVIState, per_family_data: list,
         from .laplace_potts import _sym_to_flat, _flat_to_sym
         H_flat = jnp.asarray(_sym_to_flat(jnp.asarray(state.potts_dp.atoms[h])))
         obs_j = jnp.asarray(obs_padded); mask_j = jnp.asarray(mask)
-        if use_h:
-            params = (H_flat, h_pairs_j)
-            opt_state = optimizer.init(params)
-            for _ in range(n_steps):
-                g_H, g_h_pairs = grad_fn_with_h(
-                    params[0], params[1], obs_j, mask_j, pi_j, S_j, mu_j,
-                    tau_j, t_j, cp_idx_j, cp_swap_j, is_diag_pair_j,
-                    h_prior_tau, h_share,
-                )
-                updates, opt_state = optimizer.update((g_H, g_h_pairs), opt_state)
-                params = optax.apply_updates(params, updates)
-            H_flat, h_pairs_j = params
-            new_atoms.append(np.asarray(_flat_to_sym(H_flat)))
-        else:
-            opt_state = optimizer.init(H_flat)
-            for _ in range(n_steps):
-                g = grad_fn(H_flat, obs_j, mask_j, pi_j, S_j, mu_j, tau_j, t_j)
-                updates, opt_state = optimizer.update(g, opt_state)
-                H_flat = optax.apply_updates(H_flat, updates)
-            new_atoms.append(np.asarray(_flat_to_sym(H_flat)))
+        opt_state = optimizer.init(H_flat)
+        for _ in range(n_steps):
+            g = grad_fn(H_flat, obs_j, mask_j, pi_j, S_j, mu_j, tau_j, t_j)
+            updates, opt_state = optimizer.update(g, opt_state)
+            H_flat = optax.apply_updates(H_flat, updates)
+        new_atoms.append(np.asarray(_flat_to_sym(H_flat)))
     state.potts_dp.atoms = np.stack(new_atoms)
-    if use_h:
-        # np.asarray on a JAX array returns a read-only view; np.array
-        # copies to a writable buffer so symmetrize_h_pairs_diag can
-        # mutate it in place.
-        state.potts_dp.h_pairs = np.array(h_pairs_j)
-        # Re-enforce the self-pair tying invariant on the saved state. Inside
-        # loss_fn_with_h slot 1 on diagonals receives no gradient, so the
-        # tied condition is preserved by Adam — but defensive projection
-        # keeps the saved checkpoint exactly on the constraint surface.
-        symmetrize_h_pairs_diag(state.potts_dp.h_pairs, K_c)
     return state
 
 

@@ -10,13 +10,21 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from .generator import build_joint_Q, joint_stationary, symmetrize_eigh, transition_matrices
+from .generator import (
+    build_joint_Q_pair,
+    joint_stationary_pair,
+    symmetrize_eigh,
+    transition_matrices,
+)
+from .lg08 import PI_LG08_J, S_LG08_F81_J as S_LG08_J
 
 
 def simulate_cherries(H_true: jnp.ndarray,
                       t_values: np.ndarray,
                       key: jax.Array,
-                      stationary_start: bool = True):
+                      stationary_start: bool = True,
+                      pi_a: jnp.ndarray = None,
+                      pi_b: jnp.ndarray = None):
     """Simulate (start, end) state pairs for a batch of cherry distances.
 
     Args:
@@ -25,13 +33,20 @@ def simulate_cherries(H_true: jnp.ndarray,
         key: PRNG key.
         stationary_start: if True, draw start ~ pi_joint(H_true). Otherwise
             draw start ~ Uniform on the 400 states (useful for sanity checks).
+        pi_a, pi_b: per-site stationaries. Default both to LG08 (single-class
+            synthetic regime). For multi-class simulation supply distinct
+            pi_a, pi_b matching the site-class assignments.
 
     Returns:
         starts: (M,) int32 of starting joint-state indices in 0..399
         ends:   (M,) int32 of ending joint-state indices in 0..399
     """
-    Q = build_joint_Q(H_true)
-    pi_j = joint_stationary(H_true)
+    if pi_a is None:
+        pi_a = PI_LG08_J
+    if pi_b is None:
+        pi_b = PI_LG08_J
+    Q = build_joint_Q_pair(H_true, pi_a, pi_b, S=S_LG08_J)
+    pi_j = joint_stationary_pair(H_true, pi_a, pi_b)
     Lambda, U_sym, sqrt_pij = symmetrize_eigh(Q, pi_j)
 
     M = len(t_values)

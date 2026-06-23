@@ -40,7 +40,6 @@ import numpy as np
 import optax
 
 from .generator import (
-    A,
     build_joint_Q_pair,
     joint_stationary_pair,
     log_transition_matrices,
@@ -57,7 +56,7 @@ from .laplace_potts import (
 
 @partial(jax.jit, static_argnames=())
 def loss_fn(H_flat, obs_packed, valid_mask, pi_classes, S, mu_prior,
-              tau_prior, unique_t, h_a_table=None, h_b_table=None):
+              tau_prior, unique_t):
     """Static-shape neg-log-post — memory-efficient (no full log_P tensor).
 
     H_flat:       (d,) symmetric-slice flat parameter (d = A(A+1)/2 = 210).
@@ -77,24 +76,18 @@ def loss_fn(H_flat, obs_packed, valid_mask, pi_classes, S, mu_prior,
     K_c=8 with n_t=53).
     """
     H_mat = _flat_to_sym(H_flat)
-    K_c = pi_classes.shape[0]
-    if h_a_table is None:
-        h_a_table = jnp.zeros((K_c, K_c, A))
-    if h_b_table is None:
-        h_b_table = jnp.zeros((K_c, K_c, A))
 
-    def per_pair_eigh(pi1, pi2, h_a, h_b):
-        Q = build_joint_Q_pair(H_mat, pi1, pi2, S=S, h_a=h_a, h_b=h_b)
-        pi_j = joint_stationary_pair(H_mat, pi1, pi2, h_a=h_a, h_b=h_b)
+    def per_pair_eigh(pi1, pi2):
+        Q = build_joint_Q_pair(H_mat, pi1, pi2, S=S)
+        pi_j = joint_stationary_pair(H_mat, pi1, pi2)
         Lambda, U_sym, sqrt_pij = symmetrize_eigh(Q, pi_j)
         return Lambda, U_sym, sqrt_pij
 
-    # 2D vmap over (c1, c2) with h_a_table/h_b_table indexed by both dims.
     Lambdas, U_syms, sqrt_pijs = jax.vmap(jax.vmap(
-        per_pair_eigh, in_axes=(None, 0, 0, 0)),
-        in_axes=(0, None, 0, 0))(pi_classes, pi_classes,
-                                       h_a_table, h_b_table)
+        per_pair_eigh, in_axes=(None, 0)),
+        in_axes=(0, None))(pi_classes, pi_classes)
 
+    K_c = pi_classes.shape[0]
     t_idx = obs_packed[:, 0]
     cp_ord = obs_packed[:, 1]
     c1 = cp_ord // K_c
@@ -117,49 +110,6 @@ def loss_fn(H_flat, obs_packed, valid_mask, pi_classes, S, mu_prior,
 
 
 grad_fn = jax.jit(jax.grad(loss_fn))
-
-
-@partial(jax.jit, static_argnames=())
-def loss_fn_with_h(H_flat, h_pairs, obs_packed, valid_mask, pi_classes, S,
-                     mu_prior, tau_prior, unique_t, cp_idx, cp_swap,
-                     is_diag_pair, h_prior_tau, h_share):
-    """loss_fn extended with h_pairs as a co-optimized parameter.
-
-    h_pairs: (K_c(K_c+1)/2, 2, A) per-class-pair side potentials.
-    cp_idx, cp_swap: (K_c, K_c) lookup tables (canonical-pair index +
-        swap flag for ordered (c1, c2)).
-    is_diag_pair: (K_c(K_c+1)/2,) bool, True at self-pair (c, c) indices.
-        For self-pairs the two sites are exchangeable, so we tie
-        h_pairs[i, 1, :] := h_pairs[i, 0, :] (keeping the joint pair
-        distribution symmetric and joint Q reversible). The redundant
-        slot-1 entries on diagonals also receive zero prior contribution
-        so the prior counts each diagonal h-vector exactly once.
-    h_prior_tau: scalar Gaussian-prior precision on h_pairs (centered at 0).
-    h_share: scalar in (0, 1] — fraction of the total Gaussian prior
-        attributed to THIS atom's loss. With per-atom Adam, callers pass
-        1/K_H so summing across all K_H atom calls gives the full prior.
-    """
-    # Tie h_pairs[diag, 1, :] = h_pairs[diag, 0, :] for self-pairs (c, c).
-    slot0 = h_pairs[:, 0, :]
-    slot1 = h_pairs[:, 1, :]
-    slot1_eff = jnp.where(is_diag_pair[:, None], slot0, slot1)
-    h_pairs_eff = jnp.stack([slot0, slot1_eff], axis=1)
-
-    h_a_table = h_pairs_eff[cp_idx, cp_swap]              # (K_c, K_c, A)
-    h_b_table = h_pairs_eff[cp_idx, 1 - cp_swap]
-    base_loss = loss_fn(
-        H_flat, obs_packed, valid_mask, pi_classes, S, mu_prior, tau_prior,
-        unique_t, h_a_table=h_a_table, h_b_table=h_b_table,
-    )
-    # Prior: count slot 0 always, slot 1 only on off-diagonals (slot 1 is
-    # redundant on diagonals after tying).
-    prior_slot0 = jnp.sum(slot0 ** 2)
-    prior_slot1 = jnp.sum(jnp.where(is_diag_pair[:, None], 0.0, slot1 ** 2))
-    prior_h = 0.5 * h_prior_tau * h_share * (prior_slot0 + prior_slot1)
-    return base_loss + prior_h
-
-
-grad_fn_with_h = jax.jit(jax.grad(loss_fn_with_h, argnums=(0, 1)))
 
 
 @partial(jax.jit, static_argnames=())
@@ -278,28 +228,19 @@ def laplace_log_evidence_v2(comp: LaplaceComponentV2) -> float:
 
 @partial(jax.jit, static_argnames=())
 def existing_atom_log_lik(H_atom, obs_packed, valid_mask, pi_classes, S,
-                            unique_t, h_a_table=None, h_b_table=None):
+                            unique_t):
     """Sum over (cherry, edge) of log P[(a_s, a_t), (b_s, b_t)](τ; H_atom)
     for the supplied padded obs. Used in CRP-Gibbs as the score for an
     existing atom. JIT'd once per shape signature.
-
-    h_a_table, h_b_table: optional (K_c, K_c, A) per-class-pair side
-    potentials. None or all-zeros disables side potentials.
     """
-    K_c = pi_classes.shape[0]
-    if h_a_table is None:
-        h_a_table = jnp.zeros((K_c, K_c, A))
-    if h_b_table is None:
-        h_b_table = jnp.zeros((K_c, K_c, A))
-
-    def per_pair(pi1, pi2, h_a, h_b):
-        Q = build_joint_Q_pair(H_atom, pi1, pi2, S=S, h_a=h_a, h_b=h_b)
-        pi_j = joint_stationary_pair(H_atom, pi1, pi2, h_a=h_a, h_b=h_b)
+    def per_pair(pi1, pi2):
+        Q = build_joint_Q_pair(H_atom, pi1, pi2, S=S)
+        pi_j = joint_stationary_pair(H_atom, pi1, pi2)
         Lambda, U_sym, sqrt_pij = symmetrize_eigh(Q, pi_j)
         return log_transition_matrices(unique_t, Lambda, U_sym, sqrt_pij)
-    log_P = jax.vmap(jax.vmap(per_pair, in_axes=(None, 0, 0, 0)),
-                       in_axes=(0, None, 0, 0))(
-        pi_classes, pi_classes, h_a_table, h_b_table)
+    log_P = jax.vmap(jax.vmap(per_pair, in_axes=(None, 0)),
+                       in_axes=(0, None))(pi_classes, pi_classes)
+    K_c = pi_classes.shape[0]
     t_idx = obs_packed[:, 0]; cp_ord = obs_packed[:, 1]
     c1 = cp_ord // K_c; c2 = cp_ord % K_c
     start = obs_packed[:, 2]; end = obs_packed[:, 3]

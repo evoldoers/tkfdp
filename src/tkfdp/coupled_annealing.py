@@ -77,7 +77,7 @@ class PairBoostState:
             tensor at branch length t (shared across all pairs at the same
             branch length, but cached per pair here for simplicity).
         tkf_state: the K=4 TKF-DP state (object with K_c, pi_class,
-            potts_dp.atoms/assignments/h_pairs). Used by the class-marginal
+            potts_dp.atoms/assignments). Used by the class-marginal
             M-tensor builder.
         branch_length: float tau, used by build_M_tensor_classmarg.
     """

@@ -84,14 +84,18 @@ def load_minimal_state(chkpt_dir: Path) -> _MinimalState:
     meta = json.loads((chkpt_dir / "meta.json").read_text())
     K_c = int(meta["K_c"])
     A = state_npz["pi_class"].shape[1]
-    h_pairs = state_npz["h_pairs"] if "h_pairs" in state_npz.files else None
+    if "h_pairs" in state_npz.files:
+        h_arr = np.asarray(state_npz["h_pairs"])
+        if h_arr.size > 0 and np.any(h_arr != 0):
+            raise ValueError(
+                f"Checkpoint at {chkpt_dir} has non-zero h_pairs (side "
+                f"potentials removed from the model).")
     pdp = PottsDPState(
         K_c=K_c, A=A,
         atoms=state_npz["potts_atoms"],
         assignments=state_npz["potts_assignments"],
         counts=state_npz["potts_counts"],
         alpha_H=float(meta.get("alpha_H", 1.0)),
-        h_pairs=h_pairs,
     )
     return _MinimalState(K_c=K_c, A=A, pi_class=state_npz["pi_class"],
                             potts_dp=pdp)
@@ -228,8 +232,7 @@ def main() -> int:
 
     state = load_minimal_state(CHECKPOINT_DIR)
     print(f"Loaded TKF-DP state: K_c={state.K_c}, "
-            f"K_H={state.potts_dp.atoms.shape[0]}, "
-            f"side potentials={'on' if state.potts_dp.h_pairs is not None else 'off'}")
+            f"K_H={state.potts_dp.atoms.shape[0]}")
 
     ins_rate, del_rate, ext = 0.02, 0.05, 0.5
 

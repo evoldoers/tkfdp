@@ -229,6 +229,10 @@
 \newcommand\ustate{{\tt U}}
 \newcommand\vstate{{\tt V}}
 
+\newcommand\hypergeomfn[2]{{}_{#1} F_{#2}}
+\newcommand\hypergeom[5]{\hypergeomfn{#1}{#2} \left( #3; #4; #5 \right)}
+\newcommand\gapprob{G}
+
 \newcommand\waitm{{\tt V}}
 \newcommand\waitd{{\tt W}}
 
@@ -390,7 +394,7 @@
 % =============================================================
 % Title & author
 % =============================================================
-\title{Supplementary material for\\\emph{Insertions, deletions, and exchangeable couplings:\\a Dirichlet process over TKF92 domains and sites}}
+\title{Supplementary material for\\\emph{Insertions, deletions, and exchangeable couplings:\\a Dirichlet process over TKF Potts models}}
 \author{Annabel Large}
 \author{Ian Holmes}
 \affil{Department of Bioengineering, University of California, Berkeley\\
@@ -509,6 +513,10 @@ model relates to the latent-boundary-free General Geometric Indel
 \input{tkf-mixdom/tkf/lhopital-limits.tex}
 \input{tkf-mixdom/tkf/score-derivatives.tex}
 \input{appendix-ggi.tex}
+% Composition / relative-entropy fit / renormalization, ending with the
+% instantaneous GGI flow. Under \demote its \section{} becomes the final
+% subsection of this appendix (its inner \subsections -> subsubsections).
+\input{tkf-mixdom/tkf/composition-renormalization.tex}
 \restore
 
 % =============================================================
@@ -559,7 +567,7 @@ models that this appendix collects: \MixDom, its order-1 Maraschino
 adjacency distillation, the algebraic full-Woodbury distillation,
 the \MixDom-specific SVI-BW convergence theory, the tree-level VEM
 and ancestral-reconstruction algorithms, the generalised
-phylo-HMM, the labeled-\MixDom\ Singlet and WFST, the formal
+phylo-HMM, the formal
 recursive-grammar-elaboration rules, and four worked recursive
 examples (L-TKF, TKFST, TKFStack, TKF-Genome).
 
@@ -590,7 +598,6 @@ examples (L-TKF, TKFST, TKFStack, TKF-Genome).
 \input{tkf-mixdom/tkf/varanc-vbem.tex}
 \input{tkf-mixdom/tkf/varanc-presence-mixdom.tex}
 \input{tkf-mixdom/tkf/partition-recon.tex}
-\input{tkf-mixdom/tkf/mixdom-wfst.tex}
 \input{tkf-mixdom/tkf/grammar-elaboration.tex}
 % recursive.tex (1230 lines) is the long recursive-grammar
 % appendix from the TKF paper. It \newcommand's roughly 20 macros

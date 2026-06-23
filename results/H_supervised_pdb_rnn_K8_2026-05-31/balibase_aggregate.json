@@ -1,0 +1,34 @@
+{
+  "n_pairs": 187,
+  "n_families": 22,
+  "checkpoint": "H-supervised-pdb-rnn-K8-2026-05-31",
+  "sampler": "infinite_phmm_mcmc_K8_coupled_RE",
+  "s3_results_prefix": "s3://tkf-mixdom-gpu-<AWS_ACCOUNT>/balibase-runs/v13-aws-supH-K8-2026-05-31",
+  "micro_aggregates_L150_subset": {
+    "baseline_FSA": {
+      "F1_micro": 0.4523434413637734,
+      "e_TP_sum": 4801.171768144501,
+      "mass_sum": 14869.993286116473,
+      "gold_sum": 6358
+    },
+    "supervised_TKF_DP_K8": {
+      "F1_micro": 0.45194664635712267,
+      "e_TP_sum": 4931.246916666669,
+      "mass_sum": 15464.252500000002,
+      "gold_sum": 6358
+    },
+    "opt_acc_oracle": {
+      "F1_micro": 0.4748116547154398,
+      "e_TP_sum": 5231.0,
+      "mass_sum": 15676.0,
+      "gold_sum": 6358
+    }
+  },
+  "per_pair_mean_SP": {
+    "baseline_FSA": 0.31296393711072495,
+    "supervised_TKF_DP_K8": 0.3130355243174348,
+    "opt_acc_oracle": 0.32870802571840263,
+    "delta_supervised_minus_baseline_mean": 7.158720670986487e-05
+  },
+  "notes": "187 of 210 launcher pairs after max_len<150 filter; 31 pairs from BB12014/BB20008/BB30015 launched in supH5r2 recovery batch after launcher under-counted n_seqs."
+}
