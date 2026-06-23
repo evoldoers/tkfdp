@@ -150,3 +150,9 @@ $(pdfinfo combined.pdf 2>/dev/null | awk '/Pages:/ {print $2}') pages)"
         head -n 17 "$0" | sed -n '2,$p'
         ;;
 esac
+
+# Reached only on success — build_one aborts (exit 1) on a real failure.
+# Make the exit status reliable for callers: the `[ "$OPEN" -eq 1 ] && ...`
+# lines above evaluate false without --open and would otherwise leak a
+# non-zero status to e.g. publish_drop.sh's build-verify.
+exit 0
