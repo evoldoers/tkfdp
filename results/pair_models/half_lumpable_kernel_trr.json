@@ -1,0 +1,33 @@
+{
+  "data/cherry_counts_trrosetta": {
+    "corpus": "data/cherry_counts_trrosetta",
+    "val0_indep": -2.2477578539294774,
+    "lp": null,
+    "train_per": -2.237019601508041,
+    "val_per": -2.23929383619332,
+    "monotone": true,
+    "boundary": {
+      "frac_rates_zero": 0.029210526315789475,
+      "frac_rates_below_1e6": 0.09237468671679198,
+      "frac_rates_below_1e4": 0.36951754385964913,
+      "min_pos_rate": 3.447664443019276e-29,
+      "max_rate": 0.6270634522084865,
+      "n_offdiag": 159600,
+      "single": {
+        "n": 7600,
+        "frac_zero": 0.005,
+        "n_zero": 38
+      },
+      "double": {
+        "n": 72200,
+        "frac_zero": 0.04041551246537396,
+        "n_zero": 2918
+      },
+      "n_orbits_zero": 2956,
+      "n_orbits": 79800
+    },
+    "coupling_rel": 0.09474365181197592,
+    "m_relres": 0.0043445210391556376,
+    "wall_s": 179.8258512020111
+  }
+}

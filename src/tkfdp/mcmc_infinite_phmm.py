@@ -104,7 +104,8 @@ import numpy as np
 TKFMIXDOM_ROOT = Path.home() / "tkf-mixdom" / "python"
 if str(TKFMIXDOM_ROOT) not in sys.path:
     sys.path.insert(0, str(TKFMIXDOM_ROOT))
-from tkfmixdom.jax.models.left_regular import make_tkf92_pair_hmm  # noqa: E402
+from tkfmixdom.jax.models.left_regular import (                      # noqa: E402
+    make_tkf92_pair_hmm, make_mixfrag_pair_hmm)
 from tkfmixdom.jax.dp.hmm import (                                  # noqa: E402
     pair_hmm_emissions, _pad_to_bin, _pad_seq, _emit_mask,
     _find_e_idx, NEG_INF,
@@ -115,6 +116,7 @@ from .aug_phmm import (build_M_tensor_aa_marginal,                    # noqa: E4
                         build_M_tensor_classmarg)
 from .block_likelihoods import (build_singlet_emission,               # noqa: E402
                                  build_M_tensor as build_M_tensor_unified,
+                                 build_M_tensor_typed,
                                  empirical_pi_c_from_checkpoint)
 from .f2_scfg import (                                               # noqa: E402
     forward_pair_hmm, backward_pair_hmm, _restart_forward_jit,
@@ -192,11 +194,12 @@ def _scan_traceback_kernel_jit(
         rng_key,            # PRNGKey
         scores,             # fp32 (Lx_pad+1, Ly_pad+1, n_states); padding == -inf
         log_trans,          # fp32 (n_states, n_states)
+        state_types,        # int (n_states,): generic type S/M/I/D/E per state
         stop_i, stop_j,     # int32: entry-anchor stop coordinates
         init_state,         # int32: state at the cell where the walk starts
         init_i, init_j,     # int32: cell where the walk starts
         max_iter,           # static int -- geomspace bin
-        n_states,           # static int (== 5 in current model)
+        n_states,           # static int (5 for TKF92, 3F+2 for MixFrag)
         is_start_anchor):   # static bool
     """Backward stochastic traceback as a lax.scan over fixed max_iter.
 
@@ -209,34 +212,38 @@ def _scan_traceback_kernel_jit(
     host wrapper filters.
     """
     UNREACHABLE_THRESH = -1e25
-    S_S, M_S, I_S, D_S = 0, 1, 2, 3
+    # State indices are generic for TKF92 (S,M,I,D,E == 0..4) but NOT for
+    # MixFrag (M_1,M_2,... at distinct indices), so all M/I/D/S tests go
+    # through state_types[cur_state] -- the generic TYPE -- not the raw index.
+    S_T, M_T, I_T, D_T = S, M, I, D
 
     def step(carry, key):
         cur_state, i_cur, j_cur, done = carry
+        t_cur = state_types[cur_state]
         # Compile-time-distinct termination check (is_start_anchor is static)
         if is_start_anchor:
-            at_stop = ((cur_state == S_S)
+            at_stop = ((t_cur == S_T)
                        & (i_cur == jnp.int32(0))
                        & (j_cur == jnp.int32(0)))
         else:
-            at_stop = ((cur_state == M_S)
+            at_stop = ((t_cur == M_T)
                        & (i_cur == stop_i)
                        & (j_cur == stop_j))
         # Defensive: if we somehow land in S without being at (0,0), stop too
-        terminate = at_stop | (cur_state == S_S)
+        terminate = at_stop | (t_cur == S_T)
         new_done = done | terminate
         # Output cell (sentinel when masked)
         emit_mask = ~new_done
         out_state = jnp.where(emit_mask, cur_state, jnp.int32(-1))
         out_i = jnp.where(emit_mask, i_cur, jnp.int32(-1))
         out_j = jnp.where(emit_mask, j_cur, jnp.int32(-1))
-        # Predecessor cell direction from cur_state
-        i_prev = jnp.where(cur_state == M_S, i_cur - 1,
-                  jnp.where(cur_state == I_S, i_cur,
-                   jnp.where(cur_state == D_S, i_cur - 1, i_cur)))
-        j_prev = jnp.where(cur_state == M_S, j_cur - 1,
-                  jnp.where(cur_state == I_S, j_cur - 1,
-                   jnp.where(cur_state == D_S, j_cur, j_cur)))
+        # Predecessor cell direction from cur_state's TYPE
+        i_prev = jnp.where(t_cur == M_T, i_cur - 1,
+                  jnp.where(t_cur == I_T, i_cur,
+                   jnp.where(t_cur == D_T, i_cur - 1, i_cur)))
+        j_prev = jnp.where(t_cur == M_T, j_cur - 1,
+                  jnp.where(t_cur == I_T, j_cur - 1,
+                   jnp.where(t_cur == D_T, j_cur, j_cur)))
         # Clip to valid range for safe gather (values not used when done)
         Lx_max = jnp.int32(scores.shape[0] - 1)
         Ly_max = jnp.int32(scores.shape[1] - 1)
@@ -270,9 +277,23 @@ def _sample_state_at_np(scores, log_trans, e_idx, i_pos, j_pos, succ_state,
                         n_states, rng):
     """Pure-numpy single-step predecessor-state categorical (Python side).
     Used only for the initial sample at the segment boundary; the bulk
-    backward walk is jit'd. Returns -1 if unreachable."""
+    backward walk is jit'd. Returns -1 if unreachable.
+
+    ``succ_state`` is the successor state whose predecessor we sample. It may
+    be a single index, the constant E (uses the E column), OR an array/list of
+    indices -- the MixFrag case where the successor is "a Match of any
+    fragtype": we then marginalise over the match fragtypes, i.e. use the
+    log-sum-exp of the successor columns (a single-element array reduces
+    exactly to the scalar case, so TKF92 is unchanged)."""
     UNREACHABLE_THRESH = -1e25
-    if succ_state == E:
+    if isinstance(succ_state, (list, tuple, np.ndarray)):
+        cols = np.asarray(log_trans)[:, np.asarray(succ_state, dtype=int)]
+        cmax = cols.max(axis=1, keepdims=True)
+        cmax_safe = np.where(np.isfinite(cmax), cmax, 0.0)
+        succ_term = cmax_safe[:, 0] + np.log(
+            np.exp(cols - cmax_safe).sum(axis=1))
+        tlogits = scores[i_pos, j_pos, :] + succ_term
+    elif succ_state == E:
         tlogits = scores[i_pos, j_pos, :] + log_trans[:, e_idx]
     else:
         tlogits = scores[i_pos, j_pos, :] + log_trans[:, succ_state]
@@ -344,9 +365,31 @@ class MCMCSetup:
     log_alpha: jnp.ndarray
     log_beta: jnp.ndarray
     F_partial: np.ndarray     # log space; padded; (Lx_pad+1)^2 (Ly_pad+1)^2
-    M_obs: np.ndarray         # log space; padded; (Lx_pad+1)^2 (Ly_pad+1)^2
+    M_obs: np.ndarray         # log space; padded; (Lx_pad+1)^2 (Ly_pad+1)^2  -- MM
     log_F0: float
     mu_cache: dict = field(default_factory=dict)
+
+    # A1: typed M-boost tensors keyed by edge-endpoint-type pair.
+    # Each is in log space at observed AAs, with the same 1-based padding
+    # convention as `M_obs`. Built by `precompute_partial_forward` when
+    # reversible=True. Edges may then connect any two alive cells (M, I,
+    # or D), and the M-boost lookup dispatches to the appropriate tensor.
+    #
+    #   M_obs_MI[i, j, l] = log M_MI[X_i, Y_j, Y_l]
+    #     (M cell at (i, j), I cell at Y-position l)
+    #   M_obs_MD[i, j, k] = log M_MD[X_i, Y_j, X_k]
+    #     (M cell at (i, j), D cell at X-position k)
+    #   M_obs_II[j, l]    = log M_II[Y_j, Y_l]
+    #     (two I cells at Y-positions j, l)
+    #   M_obs_DD[i, k]    = log M_DD[X_i, X_k]
+    #     (two D cells at X-positions i, k)
+    #   M_obs_ID[j, k]    = log M_ID[Y_j, X_k]
+    #     (I cell at Y-position j, D cell at X-position k)
+    M_obs_MI: np.ndarray = None  # (Lx_pad+1, Ly_pad+1, Ly_pad+1) fp32
+    M_obs_MD: np.ndarray = None  # (Lx_pad+1, Ly_pad+1, Lx_pad+1) fp32
+    M_obs_II: np.ndarray = None  # (Ly_pad+1, Ly_pad+1)           fp32
+    M_obs_DD: np.ndarray = None  # (Lx_pad+1, Lx_pad+1)           fp32
+    M_obs_ID: np.ndarray = None  # (Ly_pad+1, Lx_pad+1)           fp32
 
     # Phase-A invariant cache. These are the np.asarray-converted versions of
     # JAX-side tables that the sampler hot loops would otherwise re-convert on
@@ -365,6 +408,35 @@ class MCMCSetup:
     # truncated Ewens / equivalently a per-edge weight eps = 1/alpha_z;
     # large alpha_z discourages edges, small alpha_z favours them.
     alpha_z: float = 100.0
+
+    # Correctness mode switch.
+    #
+    # When True (default, 2026-06-27 onward): A1 model semantics.
+    #   - Joint pair stationary is Sinkhorn-corrected (reversibility under
+    #     partial presence; see generator.joint_stationary_pair_a1).
+    #   - CRP-prior denominator counts ALL alive cells (Match + Insertion +
+    #     Deletion), not Match cells only.
+    #   - Edge endpoints may be any alive cell type (M, I, or D), with the
+    #     appropriate M-boost variant by endpoint-type pair (MM, MI, MD,
+    #     II, DD, ID); see _build_M_obs_*.
+    #
+    # When False ("--pre-sinkhorn" CLI flag): legacy / A3 model semantics,
+    # for reproducing released pre-A1 checkpoints. Joint stationary skips
+    # the Sinkhorn correction; CRP denominator counts Match cells only;
+    # edges restricted to Match-Match.
+    reversible: bool = True
+
+    # Allow I/D cells as edge endpoints. Default OFF even under
+    # reversible=True because (a) the typed M_obs precompute is only
+    # available when the boost_state pipeline can route through
+    # build_M_tensor_typed; (b) the segment-resample reject-on-I/D-break
+    # rule (option a, per the 2026-06-27 design discussion) can give a
+    # high rejection rate when I/D anchors are dense, slowing the chain.
+    # Set True via mcmc_corrected_posterior(..., allow_id_edges=True) or
+    # the --allow-id-edges CLI flag in eval_balibase.py / similar.
+    # The Infinite Pair HMM is primarily a fast trainer; the evolmoves
+    # pair-HMM is the production sampler for I/D-rich workloads.
+    allow_id_edges: bool = False
 
     # Setup phase wall-time (informational).
     setup_seconds: float = 0.0
@@ -387,7 +459,8 @@ def precompute_partial_forward(
         alpha_z: float = 100.0,
         prepop_top_k: int = -1,
         prepop_chunk: int = 256,
-        prepop_mem_budget_mib: float = 2048.0) -> MCMCSetup:
+        prepop_mem_budget_mib: float = 2048.0,
+        mixfrag=None) -> MCMCSetup:
     """Build the MCMCSetup for one sequence pair.
 
     Setup cost: O(L^4) flops for F_partial; O(L^2) for alpha/beta;
@@ -417,9 +490,20 @@ def precompute_partial_forward(
     # transparent. This brings the inference-time singleton emission into
     # agreement with what was trained (svi.py uses the same per-class Q_c
     # construction; see block_likelihoods.py module docstring).
+    # MixFrag base: when `mixfrag=(exts, weights)` is supplied, build the
+    # (3F+2)-state MixFrag Pair HMM instead of 5-state TKF92. state_types maps
+    # every M_f->M, I_f->I, D_f->D, so the type-based masks downstream
+    # (state_types==M etc.) generalise unchanged; the emission override below
+    # is fragtype-independent (shared substitution), so it applies verbatim.
+    # At F=1, weights=[1], this reduces exactly to make_tkf92_pair_hmm.
     t_phase = time.time()
-    log_trans, state_types, sub_matrix_lg, pi_out_lg = make_tkf92_pair_hmm(
-        ins_rate, del_rate, t, ext, Q_lg, pi_lg)
+    if mixfrag is None:
+        log_trans, state_types, sub_matrix_lg, pi_out_lg = make_tkf92_pair_hmm(
+            ins_rate, del_rate, t, ext, Q_lg, pi_lg)
+    else:
+        _mf_exts, _mf_weights = mixfrag
+        log_trans, state_types, sub_matrix_lg, pi_out_lg = make_mixfrag_pair_hmm(
+            ins_rate, del_rate, t, _mf_exts, _mf_weights, Q_lg, pi_lg)
     if (getattr(boost_state, 'tkf_state', None) is not None
             and getattr(boost_state, 'pi_c', None) is not None):
         _, pi_out_np, sub_matrix_np = build_singlet_emission(
@@ -486,11 +570,25 @@ def precompute_partial_forward(
         # uses sum_{c1, c2} pi_c(c1) pi_c(c2) pi_joint(LG08-bg)(a, c)
         # P_joint(... ; t) at eta=1, divided by the singlet emission
         # product -- consistent with the new baseline FB above.
-        M_AA = build_M_tensor_unified(
-            boost_state.tkf_state,
-            boost_state.branch_length,
-            pi_c=np.asarray(boost_state.pi_c),
-            pair_background=getattr(boost_state, 'pair_background', 'lg08'))
+        #
+        # Phase B.3: dispatch through the CouplingModel protocol when the
+        # state exposes a .coupling accessor (added 2026-06-28); falls
+        # back to the legacy direct call for any caller that supplies a
+        # tkf_state without the protocol surface (no released checkpoints
+        # are in that state currently). Output is byte-identical for the
+        # Potts variant.
+        _coupling = getattr(boost_state.tkf_state, 'coupling', None)
+        if _coupling is not None:
+            M_AA = _coupling.build_M_tensor(
+                boost_state.branch_length,
+                pi_c=np.asarray(boost_state.pi_c),
+                pair_background=getattr(boost_state, 'pair_background', 'lg08'))
+        else:
+            M_AA = build_M_tensor_unified(
+                boost_state.tkf_state,
+                boost_state.branch_length,
+                pi_c=np.asarray(boost_state.pi_c),
+                pair_background=getattr(boost_state, 'pair_background', 'lg08'))
     else:
         # Fallback for old callers. Emit a warning + use the relic.
         print("[mcmc_infinite_phmm] WARNING: boost_state lacks tkf_state / "
@@ -525,6 +623,70 @@ def precompute_partial_forward(
     # so that M_obs[i, j, k, l] uses 1-based residue position indexing
     # consistent with F_partial.
     M_obs[1:, 1:, 1:, 1:] = gathered
+
+    # A1: typed M-boost tensors for I/D-cell edges (six total).
+    # Only built if the caller supplied tkf_state/branch_length/pi_c so we
+    # can route through the canonical build_M_tensor_typed. Otherwise
+    # the legacy gamma-weighted fallback above already lost the per-class
+    # structure and we leave the typed tensors None (edge add/remove will
+    # restrict to MM-only in that case).
+    M_typed = None
+    if (getattr(boost_state, 'tkf_state', None) is not None
+            and getattr(boost_state, 'branch_length', None) is not None
+            and getattr(boost_state, 'pi_c', None) is not None):
+        try:
+            # Phase B.3: dispatch via state.coupling when available; same
+            # output as the direct build_M_tensor_typed call for the
+            # Potts variant.
+            _coupling = getattr(boost_state.tkf_state, 'coupling', None)
+            if _coupling is not None:
+                M_typed = _coupling.build_M_tensor_typed(
+                    boost_state.branch_length,
+                    pi_c=np.asarray(boost_state.pi_c),
+                    pair_background=getattr(boost_state, 'pair_background', 'lg08'))
+            else:
+                M_typed = build_M_tensor_typed(
+                    boost_state.tkf_state,
+                    boost_state.branch_length,
+                    pi_c=np.asarray(boost_state.pi_c),
+                    pair_background=getattr(boost_state, 'pair_background', 'lg08'))
+        except Exception as exc:
+            print(f"[mcmc_infinite_phmm] WARNING: build_M_tensor_typed "
+                  f"failed ({exc!r}); I/D-cell edges will be unavailable in "
+                  f"this run.", flush=True)
+            M_typed = None
+
+    # Initialize the typed M_obs tensors; populate from M_typed if present.
+    M_obs_MI = np.zeros((Lx_pad + 1, Ly_pad + 1, Ly_pad + 1), dtype=np.float32)
+    M_obs_MD = np.zeros((Lx_pad + 1, Ly_pad + 1, Lx_pad + 1), dtype=np.float32)
+    M_obs_II = np.zeros((Ly_pad + 1, Ly_pad + 1),              dtype=np.float32)
+    M_obs_DD = np.zeros((Lx_pad + 1, Lx_pad + 1),              dtype=np.float32)
+    M_obs_ID = np.zeros((Ly_pad + 1, Lx_pad + 1),              dtype=np.float32)
+    if M_typed is not None:
+        # log-space AA-level boosts
+        lgM_MI = np.log(np.clip(M_typed['MI'], 1e-300, None)).astype(np.float32)
+        lgM_MD = np.log(np.clip(M_typed['MD'], 1e-300, None)).astype(np.float32)
+        lgM_II = np.log(np.clip(M_typed['II'], 1e-300, None)).astype(np.float32)
+        lgM_DD = np.log(np.clip(M_typed['DD'], 1e-300, None)).astype(np.float32)
+        lgM_ID = np.log(np.clip(M_typed['ID'], 1e-300, None)).astype(np.float32)
+        # Gather at observed AAs; 1-based position indexing as before.
+        # MI: (i_a, j_a, l_a) -> lgM_MI[x[i_a], y[j_a], y[l_a]]
+        M_obs_MI[1:, 1:, 1:] = lgM_MI[
+            x_clip[:, None, None],
+            y_clip[None, :, None],
+            y_clip[None, None, :]]
+        # MD: (i_a, j_a, k_a) -> lgM_MD[x[i_a], y[j_a], x[k_a]]
+        M_obs_MD[1:, 1:, 1:] = lgM_MD[
+            x_clip[:, None, None],
+            y_clip[None, :, None],
+            x_clip[None, None, :]]
+        # II: (j_a, l_a) -> lgM_II[y[j_a], y[l_a]]
+        M_obs_II[1:, 1:] = lgM_II[y_clip[:, None], y_clip[None, :]]
+        # DD: (i_a, k_a) -> lgM_DD[x[i_a], x[k_a]]
+        M_obs_DD[1:, 1:] = lgM_DD[x_clip[:, None], x_clip[None, :]]
+        # ID: (j_a, k_a) -> lgM_ID[y[j_a], x[k_a]]
+        M_obs_ID[1:, 1:] = lgM_ID[y_clip[:, None], x_clip[None, :]]
+
     breakdown['m_obs_gather'] = time.time() - t_phase
 
     # Phase-A: pre-convert the JAX-side tables that the sampler hot loops
@@ -613,6 +775,8 @@ def precompute_partial_forward(
         sub_matrix=sub_matrix, pi_out=pi_out, emit=emit,
         log_alpha=log_alpha, log_beta=log_beta,
         F_partial=F_partial, M_obs=M_obs,
+        M_obs_MI=M_obs_MI, M_obs_MD=M_obs_MD, M_obs_II=M_obs_II,
+        M_obs_DD=M_obs_DD, M_obs_ID=M_obs_ID,
         log_F0=log_F0,
         alpha_z=float(alpha_z),
         setup_seconds=setup_seconds,
@@ -672,18 +836,19 @@ def _stochastic_traceback_full(
     # Walk back through alpha. At each step we sample the (predecessor state,
     # decrement) given the current (state, i, j). For M we go to (i-1, j-1);
     # for I to (i, j-1); for D to (i-1, j).
-    while not (cur_state == S and i == 0 and j == 0):
-        if cur_state == M:
+    while not (state_types[cur_state] == S and i == 0 and j == 0):
+        t_cur = state_types[cur_state]   # generic type (MixFrag M_f -> M, etc.)
+        if t_cur == M:
             i_prev, j_prev = i - 1, j - 1
-        elif cur_state == I:
+        elif t_cur == I:
             i_prev, j_prev = i, j - 1
-        elif cur_state == D:
+        elif t_cur == D:
             i_prev, j_prev = i - 1, j
-        elif cur_state == S and i == 0 and j == 0:
+        elif t_cur == S and i == 0 and j == 0:
             break
         else:
             raise RuntimeError(
-                f"Unknown state {cur_state} at ({i}, {j})")
+                f"Unknown state {cur_state} (type {t_cur}) at ({i}, {j})")
         # Pick the predecessor state at (i_prev, j_prev).
         logits = log_alpha[i_prev, j_prev, :] + log_trans[:, cur_state]
         logits = logits - np.max(logits[np.isfinite(logits)])
@@ -696,7 +861,7 @@ def _stochastic_traceback_full(
         prev_state = int(rng.choice(log_trans.shape[0], p=w))
         i, j = i_prev, j_prev
         cur_state = prev_state
-        if not (cur_state == S and i == 0 and j == 0):
+        if not (state_types[cur_state] == S and i == 0 and j == 0):
             path.append((cur_state, i, j))
 
     path.reverse()
@@ -783,19 +948,20 @@ def _initial_alignment(rng_key, setup: MCMCSetup,
         cur = int(np.argmax(end_scores))
         i, j = Lx, Ly
         path: List[Tuple[int, int, int]] = [(cur, i, j)]
-        while not (cur == S and i == 0 and j == 0):
+        while not (state_types[cur] == S and i == 0 and j == 0):
             prev = int(TB[i, j, cur])
             if prev < 0:
                 break
-            if cur == M:
+            t_cur = state_types[cur]   # generic type (MixFrag M_f -> M, etc.)
+            if t_cur == M:
                 i, j = i - 1, j - 1
-            elif cur == I:
+            elif t_cur == I:
                 i, j = i, j - 1
-            elif cur == D:
+            elif t_cur == D:
                 i, j = i - 1, j
             else:
                 break
-            if not (prev == S and i == 0 and j == 0):
+            if not (state_types[prev] == S and i == 0 and j == 0):
                 path.append((prev, i, j))
             cur = prev
         path.reverse()
@@ -809,24 +975,157 @@ def _initial_alignment(rng_key, setup: MCMCSetup,
 # ===========================================================================
 
 
-def _match_cells_of(path: List[Tuple[int, int, int]]) -> List[Tuple[int, int]]:
-    """Return list of (i, j) Match cells in path order."""
-    return [(i, j) for (st, i, j) in path if st == M]
+def _match_cells_of(state_types, path: List[Tuple[int, int, int]]
+                    ) -> List[Tuple[int, int]]:
+    """Return list of (i, j) Match cells in path order. ``state_types`` maps a
+    state index to its generic type (so MixFrag M_f all count as M)."""
+    return [(i, j) for (st, i, j) in path if state_types[st] == M]
+
+
+# ----- Edge endpoint normalization -----------------------------------------
+# Edges are stored as `((i1, j1, t1), (i2, j2, t2))` (3-tuple endpoints)
+# whenever `setup.allow_id_edges` is True, and may be the legacy
+# `((i1, j1), (i2, j2))` form otherwise. The helpers below accept either.
+
+def _ep_pos(ep) -> Tuple[int, int]:
+    """Return (i, j) of an edge endpoint, accepting 2- or 3-tuple form."""
+    return (int(ep[0]), int(ep[1]))
+
+
+def _ep_type(ep) -> int:
+    """Return the cell-type tag of an edge endpoint, defaulting to M for
+    backward-compat 2-tuple endpoints."""
+    return int(ep[2]) if len(ep) >= 3 else int(M)
+
+
+def _ep_full(ep) -> Tuple[int, int, int]:
+    """Return (i, j, t) normalised endpoint."""
+    return (int(ep[0]), int(ep[1]), _ep_type(ep))
+
+
+def _alive_cells_of(state_types, path: List[Tuple[int, int, int]]
+                     ) -> List[Tuple[int, int, int]]:
+    """Return list of (i, j, type_tag) for every alive (M/I/D) cell in path
+    order. type_tag is M, I, or D (the integer state constants imported from
+    tkfmixdom). Used by A1 / reversible mode when edges may connect any
+    alive cell type.
+    """
+    out: List[Tuple[int, int, int]] = []
+    for (st, i, j) in path:
+        t = state_types[st]
+        if t == M or t == I or t == D:
+            out.append((int(i), int(j), int(t)))
+    return out
+
+
+def _log_M_obs_typed(setup: MCMCSetup,
+                      e1: Tuple[int, int, int],
+                      e2: Tuple[int, int, int]) -> float:
+    """log M-boost for an edge connecting two typed alive cells.
+
+    Each endpoint is (i, j, type) where type in {M, I, D}. Dispatches to
+    the appropriate M_obs_* tensor by the (type1, type2) pair, ordered so
+    the lookup matches the build_M_tensor_typed convention. Returns -inf
+    if the requested tensor is unavailable (legacy fallback path) -- the
+    caller should refuse to propose that edge type.
+
+    Tensors are in log space and use 1-based residue position indexing.
+    """
+    i1, j1, t1 = e1
+    i2, j2, t2 = e2
+    # Canonicalize: always feed the M cell (if any) as the "left" endpoint
+    # so the dispatched tensor matches the build_M_tensor_typed shapes.
+    def lookup_MM():
+        return float(setup.M_obs[i1, j1, i2, j2])
+    def lookup_MI(i_M, j_M, l_I):
+        if setup.M_obs_MI is None: return -np.inf
+        return float(setup.M_obs_MI[i_M, j_M, l_I])
+    def lookup_MD(i_M, j_M, k_D):
+        if setup.M_obs_MD is None: return -np.inf
+        return float(setup.M_obs_MD[i_M, j_M, k_D])
+    def lookup_II(j_I1, j_I2):
+        if setup.M_obs_II is None: return -np.inf
+        return float(setup.M_obs_II[j_I1, j_I2])
+    def lookup_DD(i_D1, i_D2):
+        if setup.M_obs_DD is None: return -np.inf
+        return float(setup.M_obs_DD[i_D1, i_D2])
+    def lookup_ID(j_I, k_D):
+        if setup.M_obs_ID is None: return -np.inf
+        return float(setup.M_obs_ID[j_I, k_D])
+
+    if t1 == M and t2 == M:   return lookup_MM()
+    if t1 == M and t2 == I:   return lookup_MI(i1, j1, j2)
+    if t1 == I and t2 == M:   return lookup_MI(i2, j2, j1)
+    if t1 == M and t2 == D:   return lookup_MD(i1, j1, i2)
+    if t1 == D and t2 == M:   return lookup_MD(i2, j2, i1)
+    if t1 == I and t2 == I:   return lookup_II(j1, j2)
+    if t1 == D and t2 == D:   return lookup_DD(i1, i2)
+    if t1 == I and t2 == D:   return lookup_ID(j1, i2)
+    if t1 == D and t2 == I:   return lookup_ID(j2, i1)
+    raise ValueError(f"unsupported edge endpoint types ({t1}, {t2})")
 
 
 def _edge_anchors_in_path_order(
+        state_types,
         path: List[Tuple[int, int, int]],
         edges: List[Tuple[Tuple[int, int], Tuple[int, int]]]
         ) -> List[Tuple[int, int]]:
-    """Return the union of edge endpoint Match cells in path order."""
-    edge_set = set()
+    """Return the union of edge endpoint Match cells in path order.
+    Under A1 with allow_id_edges=True, I/D anchors are NOT segment splitters
+    (they ride inside their containing segment and are preserved by the
+    reject-on-break check in _segment_resample_move); only M anchors split.
+    """
+    match_pos_in_edges = set()
     for (a, b) in edges:
-        edge_set.add(a); edge_set.add(b)
+        if _ep_type(a) == int(M):
+            match_pos_in_edges.add(_ep_pos(a))
+        if _ep_type(b) == int(M):
+            match_pos_in_edges.add(_ep_pos(b))
     out = []
     for (st, i, j) in path:
-        if st == M and (i, j) in edge_set:
+        if state_types[st] == M and (i, j) in match_pos_in_edges:
             out.append((i, j))
     return out
+
+
+def _id_anchor_positions(
+        edges: List[Tuple[Tuple[int, int], Tuple[int, int]]]
+        ) -> Dict[Tuple[int, int], int]:
+    """Return {(i, j): cell_type} for every I/D endpoint that appears in
+    `edges`. Used by _segment_resample_move to reject resamples that break
+    an I/D anchor."""
+    out: Dict[Tuple[int, int], int] = {}
+    for (a, b) in edges:
+        for ep in (a, b):
+            t = _ep_type(ep)
+            if t != int(M):
+                out[_ep_pos(ep)] = t
+    return out
+
+
+def _id_anchors_preserved(
+        proposed_path: List[Tuple[int, int, int]],
+        id_anchors: Dict[Tuple[int, int], int],
+        state_types,
+        ) -> bool:
+    """Option (a) of the I/D-edge anchor-preservation rule (per the
+    2026-06-27 design): a resampled segment is admissible iff every
+    required I/D anchor `(i, j) -> cell_type` from the edge set is
+    present in `proposed_path` at the right (i, j) AND has the right
+    cell type. Returns True if all anchors are preserved.
+
+    Used by _segment_resample_move under setup.allow_id_edges to keep
+    edges valid through alignment resamples; broken paths are rejected.
+    """
+    if not id_anchors:
+        return True
+    pos_to_type = {(int(i), int(j)): int(state_types[st])
+                   for (st, i, j) in proposed_path
+                   if state_types[st] in (M, I, D)}
+    for pos, want_t in id_anchors.items():
+        if pos_to_type.get(pos, -1) != want_t:
+            return False
+    return True
 
 
 def _path_log_prob(path: List[Tuple[int, int, int]],
@@ -923,15 +1222,20 @@ def _stochastic_traceback_segment(
             return []
         i_cur, j_cur = Lx, Ly
         # Segment-empty edge case: entry anchor is the (Lx, Ly) M cell
-        if i_cur == stop_i and j_cur == stop_j and s_init == M:
+        if (i_cur == stop_i and j_cur == stop_j
+                and setup.state_types_np[s_init] == M):
             return []
     else:
         # Exit is M at (i_b, j_b). Predecessor cell is on the diagonal.
+        # The anchor match fragtype is latent, so sample the predecessor of
+        # "a Match of any fragtype" (sum the M_f columns). For TKF92 this is
+        # the single Match state and reduces to the old scalar call.
+        match_states = np.where(setup.state_types_np == M)[0]
         i_prev, j_prev = i_b - 1, j_b - 1
         if (i_prev, j_prev) == (stop_i, stop_j):
             return []  # adjacent anchors, empty segment
         s_init = _sample_state_at_np(scores, log_trans, e_idx,
-                                     i_prev, j_prev, M, ns, rng)
+                                     i_prev, j_prev, match_states, ns, rng)
         if s_init < 0:
             return []
         i_cur, j_cur = i_prev, j_prev
@@ -944,7 +1248,7 @@ def _stochastic_traceback_segment(
     # Pass scalar args as numpy int32 (avoids jnp.int32 conversion primitives;
     # JAX will absorb them into the jit'd kernel via traced arguments).
     stacked = _scan_traceback_kernel_jit(
-        rng_key, scores, log_trans,
+        rng_key, scores, log_trans, setup.state_types,
         np.int32(stop_i), np.int32(stop_j),
         np.int32(s_init), np.int32(i_cur), np.int32(j_cur),
         max_iter=int(max_iter_bin),
@@ -1026,7 +1330,9 @@ def _resample_one_segment(
     seg_idx in {0, 1, ..., len(edge_anchor_positions)} (so 0 = start
     segment, |E_anchors| = end segment).
 
-    Returns (new_path, N_M_old_seg, N_M_new_seg).
+    Returns (new_path, N_old_seg, N_new_seg) where the counts cover all
+    alive alignment cells (M+I+D) under A1 / reversible mode (the default)
+    and Match cells only under legacy mode; see ``MCMCSetup.reversible``.
     """
     Lx, Ly = setup.Lx, setup.Ly
     n_anchors = len(edge_anchor_positions)
@@ -1056,17 +1362,28 @@ def _resample_one_segment(
     # These are the cells of `path` strictly after the entry anchor and
     # strictly before the exit anchor.
     # We split the path into segments at edge-anchor cells.
-    old_segments = _split_path_into_segments(path, edge_anchor_positions)
+    stt = setup.state_types_np
+    old_segments = _split_path_into_segments(stt, path, edge_anchor_positions)
     if seg_idx >= len(old_segments):
         # Shouldn't happen; defensive.
         return path, 0, 0
     old_seg = old_segments[seg_idx]
-    N_M_old = sum(1 for (st, _, _) in old_seg if st == M)
+    # Under reversible mode the CRP counts all alive cells (M, I, D);
+    # under legacy mode the counter is Match-only.
+    if setup.reversible:
+        _alive = (M, I, D)
+        N_old = sum(1 for (st, _, _) in old_seg if stt[st] in _alive)
+    else:
+        N_old = sum(1 for (st, _, _) in old_seg if stt[st] == M)
 
     # Sample new segment.
     new_seg = _stochastic_traceback_segment(
         rng, setup, i_a, j_a, i_b, j_b, is_start, is_end)
-    N_M_new = sum(1 for (st, _, _) in new_seg if st == M)
+    if setup.reversible:
+        _alive = (M, I, D)
+        N_new = sum(1 for (st, _, _) in new_seg if stt[st] in _alive)
+    else:
+        N_new = sum(1 for (st, _, _) in new_seg if stt[st] == M)
 
     # Assemble new path: replace old_seg with new_seg.
     new_path: List[Tuple[int, int, int]] = []
@@ -1079,10 +1396,11 @@ def _resample_one_segment(
         if k < n_anchors:
             new_path.append((M,) + edge_anchor_positions[k])
 
-    return new_path, N_M_old, N_M_new
+    return new_path, N_old, N_new
 
 
 def _split_path_into_segments(
+        state_types,
         path: List[Tuple[int, int, int]],
         edge_anchor_positions: List[Tuple[int, int]]
         ) -> List[List[Tuple[int, int, int]]]:
@@ -1103,7 +1421,7 @@ def _split_path_into_segments(
     next_anchor_idx = 0
     for cell in path:
         st, i, j = cell
-        if (st == M and next_anchor_idx < len(edge_anchor_positions)
+        if (state_types[st] == M and next_anchor_idx < len(edge_anchor_positions)
                 and (i, j) == edge_anchor_positions[next_anchor_idx]):
             # This is the next expected edge anchor; start a new segment.
             out.append([])
@@ -1117,17 +1435,31 @@ def _split_path_into_segments(
     return out
 
 
-def _crp_log_prior_pathlen(N_M: int, alpha_z: float) -> float:
+def _crp_log_prior_pathlen(N: int, alpha_z: float) -> float:
     """log of the CRP-prior path-length factor:
-        sum_{m=1..N_M} -log(m - 1 + alpha_z)
-    (Equivalently, -log of the rising factorial of alpha_z up to N_M.)
+        sum_{m=1..N} -log(m - 1 + alpha_z)
+    (Equivalently, -log of the rising factorial of alpha_z up to N.)
+
+    Under A1 / reversible mode (the 2026-06-27 default), N counts ALL
+    alive alignment cells (Match + Insertion + Deletion). Under legacy
+    mode (--pre-sinkhorn), N counts only Match cells; see
+    MCMCSetup.reversible for the switch.
     """
-    if N_M <= 0:
+    if N <= 0:
         return 0.0
-    # Use math.lgamma trick: prod_{m=1..N_M}(m - 1 + alpha_z) =
-    #   prod_{j=0..N_M-1}(alpha_z + j) = Gamma(alpha_z + N_M) / Gamma(alpha_z)
+    # Use math.lgamma trick: prod_{m=1..N}(m - 1 + alpha_z) =
+    #   prod_{j=0..N-1}(alpha_z + j) = Gamma(alpha_z + N) / Gamma(alpha_z)
     from math import lgamma
-    return float(lgamma(alpha_z) - lgamma(alpha_z + N_M))
+    return float(lgamma(alpha_z) - lgamma(alpha_z + N))
+
+
+def _count_alive_cells(state_types, path) -> int:
+    """Number of alive alignment cells (Match + Insertion + Deletion).
+    Used by the canonical CRP prior under A1 (reversible mode) where the
+    partition normalization Gamma(alpha_z + N_alive) / Gamma(alpha_z)
+    depends on the alive-set size."""
+    return sum(1 for (st, _, _) in path
+               if state_types[st] in (M, I, D))
 
 
 def _segment_resample_move(
@@ -1135,41 +1467,75 @@ def _segment_resample_move(
         setup: MCMCSetup,
         path: List[Tuple[int, int, int]],
         edge_anchor_positions: List[Tuple[int, int]],
+        id_anchors: Optional[Dict[Tuple[int, int], int]] = None,
         ) -> Tuple[List[Tuple[int, int, int]], int, int]:
-    """Apply the combined segment-resample move (per-segment MH version).
+    """Apply the combined segment-resample move.
 
-    Edge anchors are FIXED Match cells. Per H4 (systematic scan) and H7
-    (sample every adjacent segment between edge anchors), we visit each
-    inter-edge-anchor segment and run a per-segment MH move with the
-    tight-proposal simplification (Hastings ratio = CRP-prior factor
-    only).
+    Edge anchors are FIXED Match cells. We visit each inter-edge-anchor
+    segment and run a per-segment move sampling new_seg by stochastic
+    traceback from the cached partial-Forward distribution P_TKF92(A_seg
+    | anchors fixed).
 
-    Each per-segment move:
-      - Sample new_seg via stochastic traceback.
-      - Compute N_M change (delta N_M).
-      - Accept w.p. min(1, CRP_ratio) where CRP_ratio depends on the
-        change in N_M total.
+    Under A1 / reversible mode (the 2026-06-27 default) the canonical
+    CRP partition prior P(partition | L) = alpha_z^K_total /
+    Pochhammer(alpha_z, L) where L = N_alive (M+I+D count) and
+    K_total = N_alive - K_2 covers all clusters (M singletons,
+    I singletons, D singletons, and K_2 pair blocks). Segment
+    resampling changes L, so the proposal is no longer pure Gibbs:
+    the MH ratio carries both an alpha_z^(L_new - L_old) numerator
+    term (the K_total change) and a Pochhammer denominator term.
+    Concretely log MH = (L_new - L_old) * log(alpha_z) + crp(L_new)
+    - crp(L_old) where crp = -log Z_L.
+
+    Under legacy mode the move is the pre-A1 "pure Gibbs" version that
+    silently treats the CRP normalization as L-independent (i.e.\ the
+    target was implicitly the size-{1,2}-Ewens with per-pair weight
+    eps = 1/alpha_z and no L correction). The current MH version
+    reduces to it when reversible=False.
 
     Returns (new_path, n_propose, n_accept).
     """
-    cur_match_set = set(_match_cells_of(path))
+    cur_match_set = set(_match_cells_of(setup.state_types_np, path))
     for ap in edge_anchor_positions:
         assert ap in cur_match_set, \
             f"edge anchor {ap} not in current Match cells {cur_match_set}"
 
     n_segments = len(edge_anchor_positions) + 1
     n_propose = 0; n_accept = 0
+    L_total = (_count_alive_cells(setup.state_types_np, path)
+               if setup.reversible else 0)
+    # Under allow_id_edges, I/D anchors do not split segments but their
+    # positions must be preserved by any resampled segment. We pass the
+    # current set in; if a proposed_path drops any I/D anchor we reject.
+    require_id_anchors = (id_anchors is not None and len(id_anchors) > 0)
     for seg_idx in range(n_segments):
-        proposed_path, _N_M_old_seg, _N_M_new_seg = _resample_one_segment(
+        proposed_path, N_old_seg, N_new_seg = _resample_one_segment(
             rng, setup, path, edge_anchor_positions, seg_idx)
         n_propose += 1
-        # Pure Gibbs: edge endpoints are FIXED during this move, so the
-        # M boost product and the per-edge prior weight eps^|E| are
-        # constant. The conditional pi(A | E) reduces to baseline TKF92
-        # path conditional, which is exactly what _resample_one_segment
-        # samples from F_partial. Accept rate = 1 by construction.
-        path = proposed_path
-        n_accept += 1
+        if setup.reversible:
+            L_new = L_total - N_old_seg + N_new_seg
+            # Canonical-CRP MH correction: target is
+            #   π_TKF92(path) * alpha_z^L / Pochhammer(alpha_z, L)
+            # (for fixed |E| during this move). Both the alpha_z^L
+            # numerator and the Pochhammer denominator depend on L.
+            log_mh = ((L_new - L_total) * float(np.log(setup.alpha_z))
+                      + _crp_log_prior_pathlen(L_new, setup.alpha_z)
+                      - _crp_log_prior_pathlen(L_total, setup.alpha_z))
+            log_mh = min(log_mh, 0.0)  # standard MH
+            # I/D-anchor preservation (option a in the 2026-06-27 design):
+            # delegate to _id_anchors_preserved for testability.
+            if require_id_anchors and not _id_anchors_preserved(
+                    proposed_path, id_anchors, setup.state_types_np):
+                continue  # reject, path/L_total unchanged
+            u = float(rng.random())
+            if np.log(max(u, 1e-300)) < log_mh:
+                path = proposed_path
+                L_total = L_new
+                n_accept += 1
+        else:
+            # Legacy "pure Gibbs": always accept; no I/D anchors expected.
+            path = proposed_path
+            n_accept += 1
     return path, n_propose, n_accept
 
 
@@ -1212,38 +1578,57 @@ def _edge_add_move(
       q ratio same as canonical.
 
     Returns (new_edges, accepted).
+
+    Under setup.allow_id_edges, the unpaired pool is the alive cells
+    (M + I + D) and the M-boost is looked up via _log_M_obs_typed, which
+    dispatches by endpoint type pair (MM/MI/MD/II/DD/ID). Edges are
+    stored as ((i1, j1, t1), (i2, j2, t2)). Otherwise edges remain the
+    legacy ((i1, j1), (i2, j2)) Match-Match form.
     """
-    matches = _match_cells_of(path)
-    paired = set()
-    for (a, b) in edges:
-        paired.add(a); paired.add(b)
-    unpaired = [m for m in matches if m not in paired]
+    use_alive = bool(getattr(setup, 'allow_id_edges', False))
+    if use_alive:
+        cells_typed = _alive_cells_of(setup.state_types_np, path)
+        # paired set is by (i, j) position regardless of type, so a single
+        # position can be in at most one edge.
+        paired_pos = set()
+        for (a, b) in edges:
+            paired_pos.add(_ep_pos(a)); paired_pos.add(_ep_pos(b))
+        unpaired = [c for c in cells_typed if (c[0], c[1]) not in paired_pos]
+    else:
+        cells_typed = None
+        matches = _match_cells_of(setup.state_types_np, path)
+        paired = set()
+        for (a, b) in edges:
+            paired.add(_ep_pos(a)); paired.add(_ep_pos(b))
+        unpaired = [m for m in matches if m not in paired]
     n_unpaired = len(unpaired)
     if n_unpaired < 2:
         return edges, False
     if k_max >= 0 and len(edges) >= k_max:
         return edges, False
-    # Pick two unpaired Match cells uniformly.
+    # Pick two unpaired cells uniformly.
     n_pairs_unp = n_unpaired * (n_unpaired - 1) // 2
     flat_idx = int(rng.integers(0, n_pairs_unp))
-    # Decode flat_idx -> (a, b) with a < b.
     a = 0
     while flat_idx >= n_unpaired - 1 - a:
         flat_idx -= n_unpaired - 1 - a
         a += 1
     b = a + 1 + flat_idx
     p_a = unpaired[a]; p_b = unpaired[b]
-    # Canonicalise edge as a 2-tuple of unordered pairs.
-    new_edge = (p_a, p_b) if p_a <= p_b else (p_b, p_a)
-
-    # Target ratio: per-edge weight eps = 1/alpha_z (size-{1,2} Ewens
-    # / equivalently bounded-eps; mathematically identical formulations).
-    log_M = _log_M_obs(setup, p_a, p_b)
+    # Canonicalise endpoint order by (i, j); store 3-tuples under
+    # allow_id_edges, 2-tuples otherwise.
+    if use_alive:
+        e1 = (int(p_a[0]), int(p_a[1]), int(p_a[2]))
+        e2 = (int(p_b[0]), int(p_b[1]), int(p_b[2]))
+        if (e1[0], e1[1]) > (e2[0], e2[1]):
+            e1, e2 = e2, e1
+        new_edge = (e1, e2)
+        log_M = _log_M_obs_typed(setup, e1, e2)
+    else:
+        new_edge = (p_a, p_b) if p_a <= p_b else (p_b, p_a)
+        log_M = _log_M_obs(setup, p_a, p_b)
     eps = 1.0 / setup.alpha_z
     log_target = float(np.log(eps)) + log_M
-    # Proposal ratio: q_remove(old | new) / q_add(new | old).
-    # q_add(new | old) = 1 / n_pairs_unp.
-    # q_remove(old | new) = 1 / |E_new| = 1 / (|E_old| + 1).
     log_qratio = float(np.log(n_pairs_unp)) - float(np.log(len(edges) + 1))
     log_H = log_target + log_qratio
     log_H = min(log_H, 0.0)
@@ -1277,20 +1662,32 @@ def _edge_remove_move(
     idx = int(rng.integers(0, len(edges)))
     e_to_remove = edges[idx]
     p_a, p_b = e_to_remove
+    use_alive = bool(getattr(setup, 'allow_id_edges', False))
     # Compute n_unpaired after removal.
-    matches = _match_cells_of(path)
-    paired_after = set()
-    for k, e in enumerate(edges):
-        if k == idx:
-            continue
-        paired_after.add(e[0]); paired_after.add(e[1])
-    n_unpaired_after = sum(1 for m in matches if m not in paired_after)
+    if use_alive:
+        cells_typed = _alive_cells_of(setup.state_types_np, path)
+        paired_after = set()
+        for k, e in enumerate(edges):
+            if k == idx:
+                continue
+            paired_after.add(_ep_pos(e[0])); paired_after.add(_ep_pos(e[1]))
+        n_unpaired_after = sum(
+            1 for c in cells_typed if (c[0], c[1]) not in paired_after)
+    else:
+        matches = _match_cells_of(setup.state_types_np, path)
+        paired_after = set()
+        for k, e in enumerate(edges):
+            if k == idx:
+                continue
+            paired_after.add(_ep_pos(e[0])); paired_after.add(_ep_pos(e[1]))
+        n_unpaired_after = sum(1 for m in matches if m not in paired_after)
     n_pairs_unp_after = n_unpaired_after * (n_unpaired_after - 1) // 2
     if n_pairs_unp_after <= 0:
-        # Defensive (shouldn't happen since we have at least 2 unpaired
-        # Match cells after removal).
         return edges, False
-    log_M = _log_M_obs(setup, p_a, p_b)
+    if use_alive:
+        log_M = _log_M_obs_typed(setup, _ep_full(p_a), _ep_full(p_b))
+    else:
+        log_M = _log_M_obs(setup, _ep_pos(p_a), _ep_pos(p_b))
     eps = 1.0 / setup.alpha_z
     log_target = -(float(np.log(eps)) + log_M)
     log_qratio = float(np.log(len(edges))) - float(np.log(n_pairs_unp_after))
@@ -1395,8 +1792,12 @@ def _unnormalised_log_target(
     """
     log_baseline = _path_log_prob(path, setup)
     log_boost = 0.0
+    use_alive = bool(getattr(setup, 'allow_id_edges', False))
     for (a, b) in edges:
-        log_boost += _log_M_obs(setup, a, b)
+        if use_alive:
+            log_boost += _log_M_obs_typed(setup, _ep_full(a), _ep_full(b))
+        else:
+            log_boost += _log_M_obs(setup, _ep_pos(a), _ep_pos(b))
     eps = 1.0 / setup.alpha_z
     log_prior = len(edges) * float(np.log(eps))
     return log_baseline + log_boost + log_prior
@@ -1479,10 +1880,15 @@ def run_mcmc_chain(
         else:
             setup.alpha_z = alpha_z_final_eff
 
-        # 1) Pure-Gibbs path resample sweep (accept = 1 by construction).
-        edge_anchor_positions = _edge_anchors_in_path_order(path, edges)
+        # 1) Path resample sweep (Gibbs under legacy / pre-Sinkhorn; MH
+        # under A1 due to the CRP-prior MH correction and I/D-anchor
+        # preservation rejection).
+        edge_anchor_positions = _edge_anchors_in_path_order(
+            setup.state_types_np, path, edges)
+        id_anchors = (_id_anchor_positions(edges)
+                      if getattr(setup, 'allow_id_edges', False) else None)
         path, n_p, n_a = _segment_resample_move(
-            rng, setup, path, edge_anchor_positions)
+            rng, setup, path, edge_anchor_positions, id_anchors=id_anchors)
         diag.n_propose_seg += n_p
         diag.n_accept_seg += n_a
 
@@ -1502,13 +1908,13 @@ def run_mcmc_chain(
         # 3) Diagnostics + accumulator (only after burn-in).
         if sweep >= n_burnin and (sweep % record_every == 0):
             n_recorded += 1
-            for (i, j) in _match_cells_of(path):
+            for (i, j) in _match_cells_of(setup.state_types_np, path):
                 if 1 <= i <= Lx and 1 <= j <= Ly:
                     Q_acc[i - 1, j - 1] += 1.0
             diag.log_pi_trace.append(
                 _unnormalised_log_target(path, edges, setup))
             diag.n_edges_trace.append(len(edges))
-            diag.n_match_trace.append(len(_match_cells_of(path)))
+            diag.n_match_trace.append(len(_match_cells_of(setup.state_types_np, path)))
             # Edge marginal posterior accumulator: each edge endpoint
             # (cell on X x Y) contributes one count to its sequence-
             # position marginals AND to its (i, j) cell. With the
@@ -1517,8 +1923,8 @@ def run_mcmc_chain(
             # endpoint | data).
             diag.n_recorded_for_edges += 1
             for (a, b) in edges:
-                ai, aj = a
-                bi, bj = b
+                ai, aj = _ep_pos(a)
+                bi, bj = _ep_pos(b)
                 if 1 <= ai <= Lx:
                     diag.edge_pos_x_counts[ai] += 1
                 if 1 <= bi <= Lx:
@@ -1602,6 +2008,16 @@ def _swap_proposal(
         ) -> Tuple[int, int, bool]:
     """Propose a swap between a random adjacent pair of rungs.
 
+    Under the legacy / pre-A1 size-{1,2}-Ewens target (the eps formulation
+    with no L-dependent normaliser), the swap MH log ratio reduces to
+    ``(|E_b| - |E_a|) * (log a_b - log a_a)`` -- the original derivation
+    at lines 1941-1954. Under A1 / reversible mode (the 2026-06-27
+    default) each rung's target carries the canonical CRP normaliser
+    Z_L(a) = Gamma(a + L) / Gamma(a) with L = N_alive(path); swapping
+    paths between rungs introduces a four-term L-dependent correction
+    (see psb-paper/supplement.tex; this is the cross-rung analogue of
+    the within-rung CRP MH correction in _segment_resample_move).
+
     Returns (rung_a, rung_b, accepted). If K < 2, returns (-1, -1, False).
     """
     K = len(setups)
@@ -1609,11 +2025,37 @@ def _swap_proposal(
         return -1, -1, False
     a = int(rng.integers(0, K - 1))
     b = a + 1
-    _, edges_a = states[a]
-    _, edges_b = states[b]
+    path_a, edges_a = states[a]
+    path_b, edges_b = states[b]
     log_alpha_a = float(np.log(setups[a].alpha_z))
     log_alpha_b = float(np.log(setups[b].alpha_z))
     log_ratio = (len(edges_b) - len(edges_a)) * (log_alpha_b - log_alpha_a)
+    # A1: full canonical-CRP correction. The target at rung k is
+    #   π_TKF92(path) * alpha_z_k^L(path) * eps_k^|E|
+    #     * prod_e M(e) / Pochhammer(alpha_z_k, L(path)).
+    # Swapping (path_a, path_b) across rungs picks up two L-dependent
+    # contributions besides the eps term: an alpha_z^L numerator term
+    # and a Pochhammer denominator term. The eps term is the existing
+    # (|E_b| - |E_a|) * (log a_b - log a_a) already in log_ratio.
+    if setups[a].reversible and setups[b].reversible:
+        stt_a = setups[a].state_types_np
+        stt_b = setups[b].state_types_np
+        L_a = _count_alive_cells(stt_a, path_a)
+        L_b = _count_alive_cells(stt_b, path_b)
+        a_a = setups[a].alpha_z
+        a_b = setups[b].alpha_z
+        # alpha_z^L numerator change: target after swap has alpha_a^L_b
+        # at rung a and alpha_b^L_a at rung b; before swap it was
+        # alpha_a^L_a and alpha_b^L_b.
+        log_alpha_a = float(np.log(a_a))
+        log_alpha_b = float(np.log(a_b))
+        log_ratio += ((L_b - L_a) * log_alpha_a
+                      + (L_a - L_b) * log_alpha_b)
+        # Pochhammer denominator change: -log Z_L(α) terms.
+        log_ratio += (_crp_log_prior_pathlen(L_b, a_a)
+                      - _crp_log_prior_pathlen(L_b, a_b)
+                      + _crp_log_prior_pathlen(L_a, a_b)
+                      - _crp_log_prior_pathlen(L_a, a_a))
     log_ratio = min(0.0, log_ratio)
     u = float(rng.random())
     if np.log(max(u, 1e-300)) < log_ratio:
@@ -1703,9 +2145,14 @@ def run_replica_exchange_chain(
         # 1) Per-rung Gibbs+MH sweep.
         for k in range(K):
             path, edges = states[k]
-            edge_anchors = _edge_anchors_in_path_order(path, edges)
+            edge_anchors = _edge_anchors_in_path_order(
+                setup_template.state_types_np, path, edges)
+            id_anchors_k = (_id_anchor_positions(edges)
+                            if getattr(setups[k], 'allow_id_edges', False)
+                            else None)
             path, n_p, n_a = _segment_resample_move(
-                rng, setups[k], path, edge_anchors)
+                rng, setups[k], path, edge_anchors,
+                id_anchors=id_anchors_k)
             diags[k].n_propose_seg += n_p
             diags[k].n_accept_seg += n_a
             for _ in range(n_edge_moves_per_sweep):
@@ -1743,13 +2190,13 @@ def run_replica_exchange_chain(
         if sweep >= n_burnin and (sweep % record_every == 0):
             n_recorded += 1
             cold_path, cold_edges = states[0]
-            for (i, j) in _match_cells_of(cold_path):
+            for (i, j) in _match_cells_of(setup_template.state_types_np, cold_path):
                 if 1 <= i <= Lx and 1 <= j <= Ly:
                     Q_acc[i - 1, j - 1] += 1.0
             diags[0].log_pi_trace.append(
                 _unnormalised_log_target(cold_path, cold_edges, setups[0]))
             diags[0].n_edges_trace.append(len(cold_edges))
-            diags[0].n_match_trace.append(len(_match_cells_of(cold_path)))
+            diags[0].n_match_trace.append(len(_match_cells_of(setup_template.state_types_np, cold_path)))
             # Cold-rung edge marginal posterior accumulator. Same logic
             # as run_mcmc_chain above; we marginalise the cold-chain
             # samples over alignment to get P(position has an edge |
@@ -1919,9 +2366,13 @@ def _run_chain_auto_burnin(
 
     t0 = time.time()
     for sweep in range(max_sweeps):
-        edge_anchor_positions = _edge_anchors_in_path_order(path, edges)
+        edge_anchor_positions = _edge_anchors_in_path_order(
+            setup.state_types_np, path, edges)
+        id_anchors = (_id_anchor_positions(edges)
+                      if getattr(setup, 'allow_id_edges', False) else None)
         path, n_p, n_a = _segment_resample_move(
-            rng, setup, path, edge_anchor_positions)
+            rng, setup, path, edge_anchor_positions,
+            id_anchors=id_anchors)
         diag.n_propose_seg += n_p
         diag.n_accept_seg += n_a
         for _ in range(n_edge_moves_per_sweep):
@@ -1938,7 +2389,7 @@ def _run_chain_auto_burnin(
         # Trace.
         log_pi_trace.append(_unnormalised_log_target(path, edges, setup))
         n_edges_trace.append(len(edges))
-        n_match_trace.append(len(_match_cells_of(path)))
+        n_match_trace.append(len(_match_cells_of(setup.state_types_np, path)))
         # Convergence check.
         if not burnin_done and len(log_pi_trace) >= 2 * window:
             recent = np.array(log_pi_trace[-window:])
@@ -1951,7 +2402,7 @@ def _run_chain_auto_burnin(
                     print(f"  auto-burnin at sweep {sweep + 1}")
         if burnin_done:
             n_recorded += 1
-            for (i, j) in _match_cells_of(path):
+            for (i, j) in _match_cells_of(setup.state_types_np, path):
                 if 1 <= i <= Lx and 1 <= j <= Ly:
                     Q_acc[i - 1, j - 1] += 1.0
         if verbose and (sweep + 1) % 100 == 0:
@@ -1998,8 +2449,15 @@ def mcmc_corrected_posterior(
         prepop_top_k: int = -1,
         prepop_chunk: int = 256,
         prepop_mem_budget_mib: float = 2048.0,
+        mixfrag=None,
+        reversible: bool = True,
+        allow_id_edges: bool = False,
         ) -> Tuple[np.ndarray, Optional[float], np.ndarray, float, Dict]:
     """End-to-end MCMC sampler API.
+
+    ``mixfrag``: optional ``(exts, weights)`` to use a MixFrag(F) base Pair
+    HMM instead of TKF92 (``ext`` is then ignored). At F=1, weights=[1] this
+    reduces exactly to the TKF92 sampler.
 
     Same per-pair signature style as
     ``aug_phmm.aug_phmm_corrected_posterior``, plus MCMC-specific kwargs.
@@ -2026,7 +2484,18 @@ def mcmc_corrected_posterior(
         alpha_z=alpha_z,
         prepop_top_k=prepop_top_k,
         prepop_chunk=prepop_chunk,
-        prepop_mem_budget_mib=prepop_mem_budget_mib)
+        prepop_mem_budget_mib=prepop_mem_budget_mib,
+        mixfrag=mixfrag)
+    # Propagate the A1 / reversibility switch to the setup record. When
+    # False, all the A1 corrections in segment-resample (CRP-prior
+    # MH correction) and in the typed M-boost dispatch fall back to legacy
+    # behavior. M_obs (the MM tensor) was built upstream by build_M_tensor
+    # using the build_doublet_emission(reversible=True) default, which is
+    # the canonical scoring for new runs; pre-sinkhorn rebuilds would
+    # require threading the flag into the boost_state pipeline (left for
+    # the BAliBASE eval CLI; see eval_balibase.py).
+    setup.reversible = bool(reversible)
+    setup.allow_id_edges = bool(allow_id_edges)
 
     if alpha_z_ladder is not None and len(alpha_z_ladder) > 1:
         # Replica-exchange path. Cold rung is min(ladder) (target).

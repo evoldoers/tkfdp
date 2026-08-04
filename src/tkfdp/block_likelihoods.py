@@ -101,7 +101,8 @@ import jax.scipy.linalg as jsl
 # mismatch vs training (which uses S_LG08_F81_J via the same alias in
 # generator.py:33 and svi.py:60). math-verifier ERROR 1, 2026-05-15.
 from .lg08 import S_LG08_F81_J as S_LG08_J, PI_LG08_J
-from .generator import joint_stationary_pair, build_joint_Q_pair
+from .generator import (joint_stationary_pair, build_joint_Q_pair,
+                         joint_stationary_pair_a1, build_joint_Q_pair_a1)
 
 
 A = 20  # alphabet size
@@ -333,7 +334,8 @@ def build_doublet_emission(state, t: float, *, eta: float = 1.0,
                             S: Optional[np.ndarray] = None,
                             pair_background: str,
                             n_rate_bins: int = 1,
-                            a_eta: float = 2.0, b_eta: float = 2.0
+                            a_eta: float = 2.0, b_eta: float = 2.0,
+                            reversible: bool = True,
                             ) -> np.ndarray:
     """Build the (A, A, A, A) doublet emission tensor.
 
@@ -403,18 +405,26 @@ def build_doublet_emission(state, t: float, *, eta: float = 1.0,
             pi_b_jnp = jnp.asarray(pi_b_np)
 
             # Joint stationary at coupled site -- INDEPENDENT of rate
-            # multipliers (they only scale Q, not pi_joint).
-            pij_flat = joint_stationary_pair(H, pi_a_jnp, pi_b_jnp)
+            # multipliers (they only scale Q, not pi_joint). Under A1
+            # (reversible=True; the default) we Sinkhorn-correct the joint
+            # so its row/col marginals are exactly (pi_a, pi_b), matching
+            # the lone-CTMC stationary and restoring detailed balance at
+            # the indel seam; see psb-paper/supplement.tex sec:rev-suppl.
+            if reversible:
+                pij_flat = joint_stationary_pair_a1(H, pi_a_jnp, pi_b_jnp)
+            else:
+                pij_flat = joint_stationary_pair(H, pi_a_jnp, pi_b_jnp)
             pij = np.asarray(pij_flat).reshape(A, A)        # (a, c)
 
             # Sum over (r_k1, r_k2) rate-pair bins. Each bin builds a
             # different 400x400 joint generator (per-site rates differ)
             # and exp's it.
             pij_w = pi_c[c1] * pi_c[c2] * rate_weight       # scalar
+            _build_Q = build_joint_Q_pair_a1 if reversible else build_joint_Q_pair
             for (r1, r2) in rate_pairs:
-                Q_joint = build_joint_Q_pair(H, pi_a_jnp, pi_b_jnp,
-                                              S=jnp.asarray(S_arr),
-                                              eta_pair=(r1, r2))
+                Q_joint = _build_Q(H, pi_a_jnp, pi_b_jnp,
+                                    S=jnp.asarray(S_arr),
+                                    eta_pair=(r1, r2))
                 P_flat = jsl.expm(Q_joint * t)
                 P_joint = np.asarray(P_flat).reshape(A, A, A, A)
                 out += pij_w * pij[:, :, None, None] * P_joint
@@ -433,7 +443,8 @@ def build_M_tensor(state, t: float, *, eta: float = 1.0,
                     S: Optional[np.ndarray] = None,
                     pair_background: str,
                     n_rate_bins: int = 1,
-                    a_eta: float = 2.0, b_eta: float = 2.0
+                    a_eta: float = 2.0, b_eta: float = 2.0,
+                    reversible: bool = True,
                     ) -> np.ndarray:
     """Build the (A, A, A, A) edge-boost tensor
 
@@ -442,6 +453,12 @@ def build_M_tensor(state, t: float, *, eta: float = 1.0,
     This is the multiplicative likelihood ratio for converting two
     independent singletons at observed AAs (a, b) and (c, d) into a
     coupled doublet. Used by the MCMC chain's edge add/remove MH ratio.
+
+    Set `reversible=True` (default) to use the Sinkhorn-corrected (A1)
+    joint stationary in the doublet, so the per-pair likelihood is
+    root-invariant and detailed balance holds at the indel seam. Set
+    `reversible=False` for backward-compatible scoring against the
+    pre-A1 (non-reversible) released checkpoints.
 
     Same arguments as build_doublet_emission. See the module docstring
     for the consistency guarantee at t = 0, x = y.
@@ -452,6 +469,100 @@ def build_M_tensor(state, t: float, *, eta: float = 1.0,
     P_doublet = build_doublet_emission(
         state, t, eta=eta, pi_c=pi_c, S=S,
         pair_background=pair_background,
-        n_rate_bins=n_rate_bins, a_eta=a_eta, b_eta=b_eta)
+        n_rate_bins=n_rate_bins, a_eta=a_eta, b_eta=b_eta,
+        reversible=reversible)
     denom = P_singlet[:, :, None, None] * P_singlet[None, None, :, :]
     return P_doublet / np.clip(denom, 1e-300, None)
+
+
+# ---------------------------------------------------------------------------
+# Edge-type-aware M-boost tensors (A1, 2026-06-27).
+#
+# In the Infinite Pair HMM under A1 / reversible mode, edges may connect any
+# two alive alignment cells (Match, Insertion, or Deletion), not Match-Match
+# only. The M-boost tensor differs by edge-endpoint type because the
+# observation pattern at each endpoint differs:
+#   - Match cell: observed (X_i, Y_j) = (parent residue, child residue)
+#   - Insertion (I): observed Y_j only (parent residue unobserved on X)
+#   - Deletion  (D): observed X_i only (child residue unobserved on Y)
+# We marginalize the 4-axis doublet tensor over the unobserved AA at each
+# endpoint, and divide by the appropriate singleton denominator. The
+# resulting M-boost ratios are the multiplicative likelihood factor of
+# coupled-vs-independent emission at that edge.
+#
+# Index conventions (matching `build_M_tensor`):
+#   a = X residue at edge-end #1 (the "left" cell), b = Y residue at #1.
+#   c = X residue at edge-end #2 (the "right" cell), d = Y residue at #2.
+# For an Insertion at endpoint 1: a is summed out; the lookup key is (b,).
+# For a Deletion  at endpoint 1: b is summed out; the lookup key is (a,).
+# Etc.
+# ---------------------------------------------------------------------------
+
+def build_M_tensor_typed(state, t: float, *, eta: float = 1.0,
+                          pi_c: Optional[np.ndarray] = None,
+                          S: Optional[np.ndarray] = None,
+                          pair_background: str,
+                          n_rate_bins: int = 1,
+                          a_eta: float = 2.0, b_eta: float = 2.0,
+                          reversible: bool = True,
+                          ) -> dict:
+    """Return a dict {'MM','MI','MD','II','DD','ID'} of M-boost tensors,
+    one per edge-endpoint-type pair. Used by mcmc_infinite_phmm.py to
+    support I/D-cell edges under the canonical CRP partition (A1).
+
+    Shapes:
+        'MM': (A, A, A, A)  -- (Xi, Yj, Xk, Yl)
+        'MI': (A, A, A)     -- (Xi, Yj, Yl)
+        'MD': (A, A, A)     -- (Xi, Yj, Xk)
+        'II': (A, A)        -- (Yj, Yl)
+        'DD': (A, A)        -- (Xi, Xk)
+        'ID': (A, A)        -- (Yj, Xk)
+
+    The 'MM' tensor matches build_M_tensor exactly. The other five are
+    axis-sums of P_doublet divided by the appropriate
+    singlet/unary product:
+        M_MI[a,b,d] = sum_c P_doublet[a,b,c,d] / (P_singlet[a,b] pi_eff[d])
+        M_MD[a,b,c] = sum_d P_doublet[a,b,c,d] / (P_singlet[a,b] pi_eff[c])
+        M_II[b,d]   = sum_{a,c} P_doublet[a,b,c,d] / (pi_eff[b] pi_eff[d])
+        M_DD[a,c]   = sum_{b,d} P_doublet[a,b,c,d] / (pi_eff[a] pi_eff[c])
+        M_ID[b,c]   = sum_{a,d} P_doublet[a,b,c,d] / (pi_eff[b] pi_eff[c])
+    where pi_eff = class-marginal stationary (the I/D cell unary emission).
+
+    Under A1 (Sinkhorn-corrected joint), pi_joint marginalizes to
+    (pi_a, pi_b) exactly per (c1,c2), so M_II reduces algebraically to
+    the per-class-marginal exp(-H_effective) ratio (independent of t),
+    matching the static-pair intuition.
+    """
+    P_singlet, pi_eff, _ = build_singlet_emission(
+        state, t, eta=eta, pi_c=pi_c, S=S,
+        n_rate_bins=n_rate_bins, a_eta=a_eta, b_eta=b_eta)
+    P_doublet = build_doublet_emission(
+        state, t, eta=eta, pi_c=pi_c, S=S,
+        pair_background=pair_background,
+        n_rate_bins=n_rate_bins, a_eta=a_eta, b_eta=b_eta,
+        reversible=reversible)
+    # MM: (a, b, c, d)
+    denom_MM = P_singlet[:, :, None, None] * P_singlet[None, None, :, :]
+    M_MM = P_doublet / np.clip(denom_MM, 1e-300, None)
+    # MI: sum c -> (a, b, d); denom = P_singlet[a,b] * pi_eff[d]
+    P_MI = P_doublet.sum(axis=2)                              # (a, b, d)
+    denom_MI = P_singlet[:, :, None] * pi_eff[None, None, :]  # (a, b, d)
+    M_MI = P_MI / np.clip(denom_MI, 1e-300, None)
+    # MD: sum d -> (a, b, c); denom = P_singlet[a,b] * pi_eff[c]
+    P_MD = P_doublet.sum(axis=3)                              # (a, b, c)
+    denom_MD = P_singlet[:, :, None] * pi_eff[None, None, :]  # (a, b, c)
+    M_MD = P_MD / np.clip(denom_MD, 1e-300, None)
+    # II: sum a, c -> (b, d); denom = pi_eff[b] * pi_eff[d]
+    P_II = P_doublet.sum(axis=(0, 2))                         # (b, d)
+    denom_II = pi_eff[:, None] * pi_eff[None, :]
+    M_II = P_II / np.clip(denom_II, 1e-300, None)
+    # DD: sum b, d -> (a, c)
+    P_DD = P_doublet.sum(axis=(1, 3))                         # (a, c)
+    denom_DD = pi_eff[:, None] * pi_eff[None, :]
+    M_DD = P_DD / np.clip(denom_DD, 1e-300, None)
+    # ID: sum a, d -> (b, c)
+    P_ID = P_doublet.sum(axis=(0, 3))                         # (b, c)
+    denom_ID = pi_eff[:, None] * pi_eff[None, :]
+    M_ID = P_ID / np.clip(denom_ID, 1e-300, None)
+    return {'MM': M_MM, 'MI': M_MI, 'MD': M_MD,
+            'II': M_II, 'DD': M_DD, 'ID': M_ID}

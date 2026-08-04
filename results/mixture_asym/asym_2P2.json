@@ -1,0 +1,36 @@
+{
+  "side": "asymmetric_swap_pair",
+  "twoP": 2,
+  "n_pairs": 1,
+  "n_components": 2,
+  "n_pi_params": 399,
+  "val_per_count_ll": -2.656765868972262,
+  "train_per_count_ll": -2.6818914400593,
+  "val_per_count_ll_symforced": -2.672252744606289,
+  "train_per_count_ll_symforced": -2.6972249767318055,
+  "force_symmetry_cost_val": 0.015486875634026731,
+  "force_symmetry_cost_train": 0.015333536672505588,
+  "pair_weights": [
+    1.0
+  ],
+  "sym_kl_per_pair": [
+    0.29795357704555986
+  ],
+  "asym_tv_per_pair": [
+    0.31338711514937123
+  ],
+  "mi_pi": [
+    0.0741808946894403
+  ],
+  "weighted_sym_kl": 0.29795357704555986,
+  "weighted_asym_tv": 0.31338711514937123,
+  "monotone": true,
+  "n_em_iters": 60,
+  "shared_s_rel_fro": 0.9556249120764343,
+  "shared_s_offdiag_corr": 0.9065251645777622,
+  "n_train_clusters": 376740,
+  "n_val_clusters": 94824,
+  "symmetric_init": false,
+  "force_symmetric": false,
+  "seed": 0
+}

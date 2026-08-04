@@ -211,7 +211,7 @@ def test_E5_tight_proposal_check():
 
     # Also test with a non-empty edge_anchors set (one edge).
     # Pick two distinct match cells from A_old as the edge anchors.
-    matches_old = _match_cells_of(A_old)
+    matches_old = _match_cells_of(setup.state_types_np, A_old)
     if len(matches_old) >= 2:
         ea = [matches_old[0], matches_old[-1]]
         # Now resample given these anchors.
@@ -428,15 +428,34 @@ def _enumerate_alignments_canonical_crp(setup: MCMCSetup):
             for sub in all_size12_partitions(others):
                 yield [frozenset([first, partner])] + sub
 
+    # A1 (2026-06-27): the chain targets the canonical CRP with
+    # Pochhammer over N_alive (M + I + D), not N_M. The within-rung MH
+    # correction in _segment_resample_move is gated on setup.reversible
+    # and tracks N_alive. The brute-force reference must follow the
+    # same convention to match the chain. Under the legacy / pre-A1
+    # mode (setup.reversible = False) the normaliser uses N_M.
+    use_n_alive = bool(getattr(setup, 'reversible', True))
     for prob, path in results:
         matches = [(i, j) for (st, i, j) in path if st == M_STATE]
         N_M = len(matches)
-        # Pochhammer denom: alpha_z * (alpha_z + 1) * ... * (alpha_z + N_M - 1).
-        # log = lgamma(alpha_z + N_M) - lgamma(alpha_z).
-        log_pochh = lgamma(alpha_z + N_M) - lgamma(alpha_z) if N_M > 0 else 0.0
+        if use_n_alive:
+            N_norm = sum(1 for (st, _i, _j) in path
+                          if st in (M_STATE, I, D))
+        else:
+            N_norm = N_M
+        # Pochhammer denom: alpha_z * (alpha_z + 1) * ... * (alpha_z + N_norm - 1).
+        log_pochh = (lgamma(alpha_z + N_norm) - lgamma(alpha_z)
+                     if N_norm > 0 else 0.0)
+        # K (number of clusters in the size-{1,2} partition) covers the
+        # K_2 size-2 blocks plus the singletons. Singletons are the
+        # unpaired Match cells AND every I and D cell (which cannot be
+        # paired in this MM-only enumeration). Under legacy mode there
+        # are no I/D contributions and this reduces to N_M - K_2.
+        n_id = sum(1 for (st, _i, _j) in path if st in (I, D)) \
+               if use_n_alive else 0
         for partition in all_size12_partitions(matches):
-            K = len(partition)
             K_2 = sum(1 for b in partition if len(b) == 2)
+            K = len(partition) + n_id   # blocks-of-matches + I/D singletons
             log_M_prod = 0.0
             for b in partition:
                 if len(b) == 2:

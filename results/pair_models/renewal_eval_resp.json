@@ -1,0 +1,26 @@
+{
+  "renewal": {
+    "trrosetta_resp": {
+      "train": -2.0891142544678565,
+      "val": -2.091170088015349,
+      "n_params": 4389,
+      "pi_asymmetry": 0.1058953511585434
+    }
+  },
+  "renewal_gtr": {
+    "trrosetta_resp": {
+      "train": -2.092505718670174,
+      "val": -2.0944882307130928,
+      "n_params": 779,
+      "pi_asymmetry": 0.09918298829075574
+    }
+  },
+  "renewal_gtr_same": {
+    "trrosetta_resp": {
+      "train": -2.096833780751574,
+      "val": -2.098754214954333,
+      "n_params": 589,
+      "pi_asymmetry": 0.06451971451330453
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "tau": [
+    0.15,
+    0.4,
+    0.8,
+    1.5
+  ],
+  "ntot_per_bin": 400000.0,
+  "verification": {
+    "V1_lumpable_recovery": {
+      "mi_true": 0.24999999999999986,
+      "mi_fit": 0.24999810181642207,
+      "lump_resid_fit": 4.3027303942011486e-11,
+      "lump_resid_true": 0.0,
+      "monotone": true,
+      "max_decrease": -0.008257970213890076,
+      "ll": -2481531.5552879344
+    },
+    "V2_synchronized_recovery": {
+      "mi_true": 0.1499999999999999,
+      "mi_fit": 0.15015277616388423,
+      "ll_true_per": -1.4407776865120272,
+      "ll_fit_per": -1.4408326352471694,
+      "monotone": true,
+      "max_decrease": -3.930512608960271
+    }
+  }
+}

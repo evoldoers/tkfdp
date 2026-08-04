@@ -114,7 +114,7 @@ def make_setup(L=8, t=0.4, alpha_z=10.0, H_scale=0.0, seed=0):
 def init_path_and_match_cells(setup, seed=0):
     rng_key = jax.random.PRNGKey(seed)
     A_obs = _initial_alignment(rng_key, setup, init_mode="viterbi")
-    cells = _match_cells_of(A_obs)
+    cells = _match_cells_of(setup.state_types_np, A_obs)
     return A_obs, cells
 
 

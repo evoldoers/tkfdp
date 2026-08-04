@@ -1,0 +1,53 @@
+{
+  "corpus": "data/cherry_counts_trrosetta",
+  "results": {
+    "synchronized": {
+      "ll": -608856238.2386117,
+      "per_count_ll": -2.229147131658754,
+      "val_per_count_ll": -2.231511126707141,
+      "n_params": 40090,
+      "time_s": 9.641271114349365,
+      "monotone": true
+    },
+    "coupled": {
+      "ll": -610837820.9095174,
+      "per_count_ll": -2.236402110830476,
+      "val_per_count_ll": -2.2385388708735534,
+      "n_params": 3800,
+      "time_s": 6.146697282791138,
+      "monotone": true
+    },
+    "metropolis_barker": {
+      "ll": -611903522.4039254,
+      "per_count_ll": -2.2403038618190783,
+      "val_per_count_ll": -2.242350536357317,
+      "n_params": 190,
+      "time_s": 18.101040601730347,
+      "monotone": true
+    },
+    "metropolis_hastings": {
+      "ll": -611858346.7642251,
+      "per_count_ll": -2.2401384645687354,
+      "val_per_count_ll": -2.242186155698135,
+      "n_params": 190,
+      "time_s": 27.433422803878784,
+      "monotone": true
+    },
+    "metropolis_sqrt": {
+      "ll": -612006799.0613397,
+      "per_count_ll": -2.240681978770476,
+      "val_per_count_ll": -2.242736453247448,
+      "n_params": 190,
+      "time_s": 6.731070041656494,
+      "monotone": true
+    },
+    "metropolis_gtr": {
+      "ll": -616168856.8052148,
+      "per_count_ll": -2.2559201228492776,
+      "val_per_count_ll": -2.258141045950274,
+      "n_params": 190,
+      "time_s": 7.250824689865112,
+      "monotone": true
+    }
+  }
+}

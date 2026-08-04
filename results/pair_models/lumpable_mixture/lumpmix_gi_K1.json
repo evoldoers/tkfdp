@@ -1,0 +1,44 @@
+{
+  "model": "lumpable_mixture",
+  "mode": "gammaI(g4)",
+  "K": 1,
+  "single_rate": false,
+  "gamma_cats": 4,
+  "val_per_count_ll": -2.6204278226553277,
+  "train_per_count_ll": -2.6450816248910125,
+  "monotone": true,
+  "n_em_iters": 30,
+  "weights": [
+    1.0
+  ],
+  "mi_pi": [
+    0.01992908099816834
+  ],
+  "mi_weighted": 0.01992908099816834,
+  "rate_weights": [
+    0.0033215398865754715,
+    0.03136373047817751,
+    0.08715014644141071,
+    0.3501275148528937,
+    0.5280370683409427
+  ],
+  "rate_vals": [
+    0.0,
+    0.1389336433358474,
+    0.47972049592569205,
+    1.0016283172803044,
+    2.379717543458156
+  ],
+  "alpha": 1.009944,
+  "p_inv": 0.0033215398865754715,
+  "mean_rate": 1.6534418974776002,
+  "class_rate_mi_nats": 0.0,
+  "class_rate_nmi": 0.0,
+  "H_class": -0.0,
+  "H_rate": 1.0452328945746807,
+  "n_train_clusters": 376740,
+  "n_val_clusters": 94824,
+  "init_mixture": "results/mixture_component_char/components_K1.npz",
+  "alm_outer": 12,
+  "seed": 0
+}

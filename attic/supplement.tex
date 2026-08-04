@@ -1,0 +1,42 @@
+% =============================================================
+% This file is retained as a stub. The canonical TKF-DP supplement
+% (including reversibility under partial presence, the order rule,
+% the dynamic latent-field variant, the structured-mean-field
+% variational ELBO for general phylogenies, and the survival of
+% the approximate evaluators under A1 and the dynamic field)
+% lives in
+%
+%     ../math-paper/supplement.tex
+%
+% which inputs ../math-paper/appendix-tkfdp.tex and the rest of the
+% TKF / MixFrag / MixDom appendices. Build it with
+%
+%     cd ../math-paper && bash build.sh --supp
+%
+% This produces ../math-paper/supplement.pdf, which is also the
+% PDF distributed at tkfdp.net (see scripts/publish_drop.sh). The
+% PSB paper's `\externaldocument[S-]` directive in psb2027.tex
+% reads label definitions from ../math-paper/supplement.aux so
+% that Section~\ref{S-...} references resolve.
+%
+% This stub is kept (rather than deleted) so that psb-paper/build.sh
+% --supp continues to have a target to delegate to math-paper/build.sh
+% from; see that script's --supp branch.
+% =============================================================
+
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{url}
+\begin{document}
+
+\section*{Supplement (stub)}
+
+This is a stub. The canonical TKF-DP supplement now lives at
+\texttt{../math-paper/supplement.tex} (built by
+\texttt{cd ../math-paper \&\& bash build.sh --supp}, producing
+\texttt{../math-paper/supplement.pdf}). See the PSB main paper's
+external-document directive in \texttt{psb2027.tex}, which pulls
+label definitions from \texttt{../math-paper/supplement.aux} for
+cross-references.
+
+\end{document}

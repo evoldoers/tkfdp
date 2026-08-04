@@ -2,6 +2,21 @@
 SCFG posterior. Generalises ``src/tkfdp/aug_phmm.py`` to allow up to
 two coupled column-pairs per alignment.
 
+OBSOLESCENT (2026-06-27). This module is the bounded-edge truncation
+(k_max = 2) that preceded the Infinite Pair HMM MCMC sampler in
+``src/tkfdp/mcmc_infinite_phmm.py``. It is retained for backward
+compatibility and as a verification target (see E.2 in
+``mcmc_infinite_phmm.py``), but it does NOT implement either:
+  (a) the reversibility correction (A1 / Sinkhorn-determined single-site
+      side potentials, ``generator.joint_stationary_pair_a1``), so its
+      per-pair likelihood is root-dependent on partial-presence pairs; or
+  (b) the corrected CRP prior denominator
+      (N_alive = N_M + N_I + N_D rather than N_M only), so its
+      partition prior weights are inconsistent with the model spec.
+
+New work should use ``mcmc_infinite_phmm.py``. Importing this module
+emits a DeprecationWarning.
+
 The principled prior is the size-{0, 1, 2}-truncated Ewens partition
 (equivalently a CRP-truncated stick on coupled-edge endpoints).
 Under our static-tag-space approximation (per-cell encoding of the
@@ -113,6 +128,7 @@ like operation).
 from __future__ import annotations
 
 import sys
+import warnings
 from functools import partial
 from pathlib import Path
 from typing import Tuple
@@ -120,6 +136,14 @@ from typing import Tuple
 import jax
 import jax.numpy as jnp
 import numpy as np
+
+# Emit a one-shot deprecation notice at import. See module docstring.
+warnings.warn(
+    "tkfdp.aug_phmm_2edge is obsolescent: bounded 2-edge SCFG; does NOT "
+    "implement A1 reversibility (joint_stationary_pair_a1) or the corrected "
+    "CRP prior (N_alive). Use tkfdp.mcmc_infinite_phmm for new work.",
+    DeprecationWarning, stacklevel=2,
+)
 
 # Pull tkfmixdom's TKF92 Pair HMM builder + state codes (do not modify).
 TKFMIXDOM_ROOT = Path.home() / "tkf-mixdom" / "python"

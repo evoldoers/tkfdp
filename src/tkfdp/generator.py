@@ -168,6 +168,154 @@ def build_joint_Q_pair(H: jnp.ndarray,
     return Q
 
 
+# ---------------------------------------------------------------------------
+# A1 (Sinkhorn) reversibility correction. See psb-paper/supplement.tex
+# `sec:rev-suppl` for the math; in short, the naive joint
+#     pi_joint_naive(a,b) ∝ pi_a(a) pi_b(b) exp(-H(a,b))
+# has marginals different from (pi_a, pi_b) whenever H != 0, which makes the
+# augmented (substitution + indel) generator non-reversible on partial-
+# presence pairs. The single-site Sinkhorn fix introduces side potentials
+# (h_a, h_b) so that
+#     pi_joint_a1(a,b) ∝ pi_a(a) pi_b(b) exp(-h_a(a) - h_b(b) - H(a,b))
+# has marginals exactly (pi_a, pi_b). The interaction is preserved exactly
+# (every log-odds-ratio of H survives the scaling), so H still carries
+# correlation; the side potentials are a deterministic readout of (pi, H).
+# ---------------------------------------------------------------------------
+
+def sinkhorn_pair(H: jnp.ndarray,
+                  pi_a: jnp.ndarray, pi_b: jnp.ndarray,
+                  max_iter: int = 200, tol: float = 1e-12
+                  ) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Sinkhorn / IPF matrix scaling: find side potentials (h_a, h_b) so the
+    corrected joint
+        pi_joint_a1(a,b) ∝ pi_a(a) pi_b(b) exp(-h_a(a) - h_b(b) - H(a,b))
+    has marginals exactly pi_a (rows) and pi_b (cols).
+
+    Gauge: we normalize so that pi_a[0]-weighted h_a sums to zero (one
+    arbitrary additive constant per row potential and per column potential
+    is absorbed by the joint normalizer). Iteration runs in log space for
+    numerical stability and is implemented as a fixed-iter jax.lax.while_loop
+    so it stays JIT-compatible.
+
+    Returns (h_a, h_b), both shape (A,).
+    """
+    H_sym = 0.5 * (H + H.T)
+    log_pi_a = jnp.log(pi_a)
+    log_pi_b = jnp.log(pi_b)
+    # log K0(a, b) = log pi_a + log pi_b - H_sym; Sinkhorn iterates
+    # log_u, log_v such that logsumexp_b (log K0 + log_v) = log pi_a + log_u^{-1}
+    # equivalently rescales rows then cols repeatedly.
+    log_K0 = log_pi_a[:, None] + log_pi_b[None, :] - H_sym
+
+    def body(state):
+        log_u, log_v, _it, _err = state
+        # row rescale
+        log_u_new = log_pi_a - jax.scipy.special.logsumexp(
+            log_K0 + log_v[None, :], axis=1)
+        # col rescale
+        log_v_new = log_pi_b - jax.scipy.special.logsumexp(
+            log_K0 + log_u_new[:, None], axis=0)
+        err = jnp.maximum(
+            jnp.max(jnp.abs(log_u_new - log_u)),
+            jnp.max(jnp.abs(log_v_new - log_v)))
+        return (log_u_new, log_v_new, _it + 1, err)
+
+    def cond(state):
+        _u, _v, it, err = state
+        return (it < max_iter) & (err > tol)
+
+    init = (jnp.zeros(A), jnp.zeros(A), 0, jnp.inf)
+    log_u, log_v, _, _ = jax.lax.while_loop(cond, body, init)
+    # h_a = -log_u, h_b = -log_v (so pi_joint_a1 ∝ K0 * exp(log_u + log_v))
+    h_a = -log_u
+    h_b = -log_v
+    # Gauge-fix: center each potential by subtracting its (pi-weighted) mean.
+    h_a = h_a - jnp.sum(pi_a * h_a)
+    h_b = h_b - jnp.sum(pi_b * h_b)
+    return h_a, h_b
+
+
+def joint_stationary_pair_a1(H: jnp.ndarray,
+                              pi_a: jnp.ndarray,
+                              pi_b: jnp.ndarray) -> jnp.ndarray:
+    """Sinkhorn-corrected joint stationary (the A1 amendment).
+
+    Marginal-consistency: sum_b pi_joint(a,b) = pi_a(a) and sum_a = pi_b(b)
+    hold exactly, restoring reversibility of the augmented generator.
+    """
+    H_sym = 0.5 * (H + H.T)
+    h_a, h_b = sinkhorn_pair(H_sym, pi_a, pi_b)
+    log_pi = (jnp.log(pi_a)[:, None] + jnp.log(pi_b)[None, :]
+              - h_a[:, None] - h_b[None, :] - H_sym)
+    log_pi = log_pi - jax.scipy.special.logsumexp(log_pi)
+    return jnp.exp(log_pi).reshape(A2)
+
+
+def build_joint_Q_pair_a1(H: jnp.ndarray,
+                           pi_a: jnp.ndarray, pi_b: jnp.ndarray,
+                           S: jnp.ndarray = S_LG08_J,
+                           eta_pair: tuple[float, float] = (1.0, 1.0)
+                           ) -> jnp.ndarray:
+    """A1 (Sinkhorn-corrected) joint generator.
+
+    The pair CTMC stays reversible w.r.t. the marginal-consistent joint
+    pi_joint_a1 (so detailed balance holds across the indel seam, where
+    the surviving site continues under the lone pi_a/pi_b). Construction:
+    apply the same F81-form pattern as `build_joint_Q_pair` but with each
+    per-site stationary multiplied by the Sinkhorn factor exp(-h_*).
+
+    Site-1 flip rate: eta_1 S[a,a'] * pi_a(a') * exp(-h_a(a')) * exp(-0.5 dH_1)
+    Site-2 flip rate: eta_2 S[b,b'] * pi_b(b') * exp(-h_b(b')) * exp(-0.5 dH_2)
+
+    This satisfies the detailed-balance condition with pi_joint_a1 (see
+    psb-paper/supplement.tex sec:rev-suppl).
+    """
+    eta_1, eta_2 = eta_pair
+    H_sym = 0.5 * (H + H.T)
+    h_a, h_b = sinkhorn_pair(H_sym, pi_a, pi_b)
+    pi_a_tilde = pi_a * jnp.exp(-h_a)
+    pi_b_tilde = pi_b * jnp.exp(-h_b)
+    S_off = S - jnp.diag(jnp.diag(S))
+    R1 = eta_1 * (S_off * pi_a_tilde[None, :])[:, None, :] * jnp.exp(
+        -0.5 * (H_sym.T[None, :, :] - H_sym[:, :, None])
+    )
+    R2 = eta_2 * (S_off * pi_b_tilde[None, :])[None, :, :] * jnp.exp(
+        -0.5 * (H_sym[:, None, :] - H_sym[:, :, None])
+    )
+    eye = jnp.eye(A)
+    Q4 = (R1[:, :, :, None] * eye[None, :, None, :]
+          + R2[:, :, None, :] * eye[:, None, :, None])
+    Q = Q4.reshape(A2, A2)
+    row_sums = Q.sum(axis=1)
+    Q = Q - jnp.diag(row_sums)
+    return Q
+
+
+def conditional_boltzmann_insertion(pi_joint_flat: jnp.ndarray,
+                                      given_axis: int) -> jnp.ndarray:
+    """Return the conditional P(other_axis | given_axis) at a coupled pair
+    under joint stationary pi_joint_flat (shape (A^2,)).
+
+    Used at indel-seam insertion: when one site of a pair is born next to
+    a still-alive partner at AA `a`, the new residue's AA must be drawn
+    from pi_joint(other | a) to satisfy detailed balance with the
+    cross-level deletion edge (Thm. `thm:revcond` of the supplement).
+
+    given_axis: 0 if the surviving site is at axis 0 (rows), 1 if axis 1.
+
+    Returns (A, A) matrix where row `a` is P(other | given=a).
+    """
+    pi = pi_joint_flat.reshape(A, A)
+    if given_axis == 0:
+        marg = pi.sum(axis=1, keepdims=True)
+    else:
+        marg = pi.sum(axis=0, keepdims=True).T  # (A, 1) of column sums
+    cond = pi / jnp.clip(marg, 1e-300, None)
+    if given_axis == 1:
+        cond = cond.T  # so row=given index, col=other index uniformly
+    return cond
+
+
 def symmetrize_eigh(Q: jnp.ndarray, pi_joint: jnp.ndarray):
     """Symmetrize via Q_sym = D^{1/2} Q D^{-1/2} with D = diag(pi_joint),
     eigendecompose, and return (Lambda, U_sym, sqrt_pi_joint).

@@ -1,0 +1,73 @@
+{
+  "corpus": "data/cherry_counts_af_full",
+  "reference_lumpable": {
+    "train": -1.3508116513698032,
+    "val": -1.3247574872032695
+  },
+  "seeds": {
+    "product": {
+      "start_train": -1.9781155517262268,
+      "lump_resid": 0.21932411701643,
+      "em_train": -1.3504994461528208,
+      "em_val": -1.324543903229866,
+      "monotone": true,
+      "time_s": 5821.026775598526
+    },
+    "renewal_emp": {
+      "start_train": -1.8254353515727098,
+      "lump_resid": 2.2946202954061707e-16,
+      "em_train": -1.4415327603644323,
+      "em_val": -1.4142942568890282,
+      "monotone": false,
+      "time_s": 2050.9829592704773
+    },
+    "renewal_K4_c0(w=0.37)": {
+      "start_train": -1.8867439645680464,
+      "lump_resid": 2.5220669673019917e-16
+    },
+    "renewal_K4_c1(w=0.22)": {
+      "start_train": -1.906845124129569,
+      "lump_resid": 2.236660463026428e-16
+    },
+    "renewal_K4_c2(w=0.21)": {
+      "start_train": -1.929515147043911,
+      "lump_resid": 2.910187366153016e-16
+    },
+    "renewal_K4_c3(w=0.20)": {
+      "start_train": -1.9635852686300042,
+      "lump_resid": 1.6191705673680635e-16
+    },
+    "renewal_K8_c0(w=0.17)": {
+      "start_train": -1.9156383594737332,
+      "lump_resid": 2.6178679224141844e-16
+    },
+    "renewal_K8_c1(w=0.15)": {
+      "start_train": -1.9225100708855432,
+      "lump_resid": 2.625503040272123e-16
+    },
+    "renewal_K8_c2(w=0.15)": {
+      "start_train": -1.9014646037364356,
+      "lump_resid": 2.458582490920378e-16
+    },
+    "renewal_K8_c3(w=0.13)": {
+      "start_train": -2.0137114328708146,
+      "lump_resid": 2.0489150439769934e-16
+    },
+    "renewal_K8_c4(w=0.12)": {
+      "start_train": -2.0119613315343425,
+      "lump_resid": 2.723455450953368e-16
+    },
+    "renewal_K8_c5(w=0.12)": {
+      "start_train": -1.9551903685676912,
+      "lump_resid": 2.5281418753707996e-16
+    },
+    "renewal_K8_c6(w=0.09)": {
+      "start_train": -1.9376293258783468,
+      "lump_resid": 1.9834823404708041e-16
+    },
+    "renewal_K8_c7(w=0.08)": {
+      "start_train": -2.011090546945384,
+      "lump_resid": 2.8046746533037604e-16
+    }
+  }
+}

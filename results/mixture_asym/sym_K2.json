@@ -1,0 +1,19 @@
+{
+  "mode": "shared-free-S",
+  "K": 2,
+  "val_per_count_ll": -2.6527499468115447,
+  "train_per_count_ll": -2.6778810344256128,
+  "weights": [
+    0.5840900888513546,
+    0.4159099111486455
+  ],
+  "mi_pi": [
+    0.04986435522749396,
+    0.12046545096764688
+  ],
+  "mi_weighted": 0.07922805068377797,
+  "shared_s_rel_fro": 0.9556288094904609,
+  "shared_s_offdiag_corr": 0.907822515999582,
+  "n_train_clusters": 376740,
+  "n_val_clusters": 94824
+}

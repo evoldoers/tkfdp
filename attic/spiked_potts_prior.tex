@@ -1,0 +1,229 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{hyperref}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\MI}{\mathrm{MI}}
+\newcommand{\soft}{\mathrm{soft}}
+\newcommand{\Potts}{\textsc{Potts}}
+\newcommand{\CTMC}{\textsc{ctmc}}
+
+\title{A null-spiked, $L_1$-sparse prior for coevolutionary \Potts\ mixtures}
+\author{Companion derivation for \texttt{paper2b-symmetry.tex}}
+\date{}
+
+\begin{document}
+\maketitle
+
+\noindent\emph{Status: derivation, ahead of implementation. Notation follows
+\texttt{paper2b-symmetry.tex}: a mixture of $K$ coevolutionary ``interaction classes''
+fit to a corpus of contacting column pairs, each class a reversible pair \CTMC, with a
+shared single-site exchangeability $S$ and a $\Gamma$+I rate grid orthogonal to the class
+label. The empirical finding this prior is built for: a mixture of coupled
+(\Potts) classes beats a mixture of null products-of-marginals by only $\sim$$0.005$--$0.008$
+nats/count, so coupling is a small, class-dependent effect. We want a prior that lets each
+class decide whether it needs a coupling term at all, and, if so, keeps only the pairs the
+data support --- turning ``how much coupling survives as phylogenetic signal'' into an
+inferred model-selection quantity rather than a blanket assertion.}
+
+\section{The class model and its null}
+\label{sec:model}
+
+Write a class-$k$ pair stationary in \Potts\ form on the $A{=}20$ amino acids,
+\begin{equation}
+\label{eq:stationary}
+\pi_k(a,b)=\frac{1}{Z_k}\exp\!\big(h^{(k)}_a+h^{(k)}_b+J^{(k)}_{ab}\big),\qquad
+J^{(k)}=J^{(k)\top},\quad J^{(k)}_{aa}=0,
+\end{equation}
+with \emph{fields} $h^{(k)}\in\mathbb R^{A}$ (single-site composition) and a symmetric,
+hollow \emph{coupling} $J^{(k)}$. The class reversible generator is built from the shared
+exchangeability $S$ by the Metropolis-$\sqrt{\cdot}$ rule, e.g.\ for a site-1 move
+$(a,c)\!\to\!(b,c)$,
+\begin{equation}
+\label{eq:generator}
+Q_k\big[(a,c)\!\to\!(b,c)\big]=S_{ab}\,\sqrt{\pi_k(b,c)/\pi_k(a,c)}
+   =S_{ab}\,\exp\!\tfrac12\!\big[(h_b-h_a)+(J_{bc}-J_{ac})\big],
+\end{equation}
+and symmetrically for site 2; simultaneous moves have rate $0$ (single-transition class).
+The partition function $Z_k$ \emph{cancels} from every transition rate, so the
+transition likelihood depends on $J^{(k)}$ only through \emph{differences}
+$J_{bc}-J_{ac}$ --- the same cancellation that lets the coevolution ELBO reduce to pairwise
+bridge statistics (paper2b, \S\,fixed-bridge). The equilibrium enters the likelihood only
+through the dwell/exposure term (below), never through $\log Z_k$.
+
+\paragraph{The null is $J^{(k)}=0$.} Setting the coupling to zero collapses
+\eqref{eq:stationary} to a rank-one additive energy,
+\begin{equation}
+\pi_k(a,b)\big|_{J=0}=\theta^{(k)}_a\theta^{(k)}_b,\qquad \theta^{(k)}_a\propto e^{h^{(k)}_a},
+\end{equation}
+a \emph{product of marginals}: the class carries per-class composition but no
+residue--residue coupling, and \eqref{eq:generator} reduces to two independent single-site
+chains (the spectator index $c$ drops out of the rate). This is exactly the additive
+``$h\oplus h$'' \Potts\ matrix, and it is the null against which coupling is measured.
+The coupling directions are the departures of $J$ from this additive subspace.
+
+\section{The null-spiked, $L_1$-sparse prior}
+\label{sec:prior}
+
+We place a \emph{spike-and-slab} prior on each class's coupling, at the class level (the
+``this class can be a pure null'' decision) with a Laplace ($L_1$) slab (within-class
+sparsity). Introduce a class null-indicator $\gamma_k\in\{0,1\}$,
+\begin{equation}
+\label{eq:prior}
+\gamma_k\sim\mathrm{Bernoulli}(\rho),\qquad
+p\big(J^{(k)}\mid\gamma_k\big)=
+\begin{cases}
+\delta_0\!\big(J^{(k)}\big) & \gamma_k=0\ \ (\text{null}),\\[4pt]
+\displaystyle\prod_{a<b}\tfrac{\lambda}{2}\,e^{-\lambda\,|J^{(k)}_{ab}|} & \gamma_k=1\ \ (\text{coupled}),
+\end{cases}
+\end{equation}
+so that, marginalising $\gamma_k$, the prior on the coupling is the \emph{zero-adjusted}
+(null-enriched) mixture
+\begin{equation}
+\label{eq:zeroadj}
+p\big(J^{(k)}\big)=(1-\rho)\,\delta_0\!\big(J^{(k)}\big)
+   +\rho\prod_{a<b}\tfrac{\lambda}{2}\,e^{-\lambda\,|J^{(k)}_{ab}|}
+\end{equation}
+--- an atom of mass $1-\rho$ on the product-of-marginals null, plus a sparse continuous
+slab. The fields carry a smooth prior $h^{(k)}\sim\mathcal N(0,\sigma_h^2 I)$ (or a flat
+one; composition is always present). Two hyperparameters control the two regularisers:
+$\rho$ (the prior probability that a class couples at all --- ``null-enrichment'', small
+$\rho$ demanding strong evidence before a class turns on) and $\lambda$ (the $L_1$ rate,
+sparsifying \emph{which} residue pairs couple within an active class). Both admit
+conjugate-ish hyperpriors, $\rho\sim\mathrm{Beta}(a_\rho,b_\rho)$ and a Gamma prior on
+$\lambda$, so the corpus sets its own null-enrichment and sparsity level. An entry-level
+variant replaces the single $\gamma_k$ by per-pair indicators $\gamma_{k,ab}$; the
+class-level form is the one that answers ``is this an interaction class or a composition
+class'', which is the quantity of interest.
+
+\paragraph{Structural alternative.} Equivalently one may drop $\gamma_k$ and impose the
+$L_1$ slab alone: \eqref{eq:zeroadj} with $\rho{=}1$ still yields exact zeros at the
+optimum (the Laplace kink), so pure $L_1$ already gives within-class sparsity and, for
+large $\lambda$, whole-class collapse to the null. The explicit spike is worth keeping
+because it (i) separates the two questions --- \emph{whether} to couple ($\gamma_k$) from
+\emph{how sparsely} ($\lambda$) --- and (ii) gives a calibrated posterior
+$p(\gamma_k{=}1\mid\text{data})$, the phylogenetic-support probability we ultimately read
+off.
+
+\section{The MAP objective}
+\label{sec:objective}
+
+Fix the mixture E-step: responsibilities $r_{g,k,m}$ over class $k$ and rate bin $m$ for
+each contact cluster $g$, and from them the responsibility-weighted, rate-aggregated
+Holmes--Rubin sufficient statistics of class $k$ --- usage $N^{(k)}_{xy}$ (expected
+$x\!\to\!y$ transitions) and dwell $T^{(k)}_x$ over the $A^2$ pair states. The expected
+complete-data log-likelihood of class $k$ is the exponential family
+\begin{equation}
+\label{eq:ell}
+\ell_k(h,J)=\sum_{x\ne y}N^{(k)}_{xy}\log Q_k(x\!\to\!y)
+   -\sum_x T^{(k)}_x\!\!\sum_{y\ne x}\!Q_k(x\!\to\!y),
+\end{equation}
+a smooth concave-in-$\log Q$ function of $(h,J)$ through
+\eqref{eq:generator}. The class MAP objective adds the prior:
+\begin{equation}
+\label{eq:map}
+\mathcal F_k(h,J,\gamma_k)=\ell_k(h,J)-\tfrac{1}{2\sigma_h^2}\|h\|^2
+   +\gamma_k\Big[\log\tfrac{\rho}{1-\rho}
+   -\lambda\!\sum_{a<b}\!|J_{ab}|+\tbinom{A}{2}\log\tfrac{\lambda}{2}\Big]
+   -(1-\gamma_k)\,\mathbb 1[J\ne0]\cdot\infty .
+\end{equation}
+Maximising over $(h,J)$ for each $\gamma_k$ and then over $\gamma_k$ gives the joint MAP;
+alternating this per-class update with the standard mixture-weight and $\Gamma$+I updates
+is a generalised EM.
+
+\paragraph{The coupling gradient is a pair-flux balance.} Because $\log Z_k$ cancels,
+$\partial\log Q_k[(a,c)\!\to\!(b,c)]/\partial J_{pq}=\tfrac12(\mathbb 1_{\{b,c\}=\{p,q\}}
+-\mathbb 1_{\{a,c\}=\{p,q\}})$, so
+\begin{equation}
+\label{eq:grad}
+\frac{\partial\ell_k}{\partial J_{pq}}
+=\tfrac12\Big[\underbrace{U^{\to}_{pq}-U^{\leftarrow}_{pq}}_{\text{usage into}-\text{out of }(p,q)}
+-\underbrace{\big(D^{\to}_{pq}-D^{\leftarrow}_{pq}\big)}_{\text{exposure-weighted rate flux}}\Big],
+\end{equation}
+where $U^{\to}_{pq}=\sum_{a\ne p}N^{(k)}_{(a,q),(p,q)}+\sum_{c\ne q}N^{(k)}_{(p,c),(p,q)}$
+counts observed single-site moves that \emph{create} pair $(p,q)$ (and $U^{\leftarrow}$
+those that destroy it), while $D^{\to}_{pq}=\sum_{a\ne p}T^{(k)}_{(a,q)}Q_k[(a,q)\!\to\!(p,q)]
++\dots$ is the model's expected creation rate weighted by dwell. At the unpenalised
+optimum $\partial\ell_k/\partial J=0$ is a detailed pair-flux balance: the observed net
+flux into each pair matches the model's. This is the phylogenetic analogue of the
+plmDCA moment-matching condition (observed pair frequency $=$ model pair frequency), with
+the tree, branch lengths, and rate heterogeneity carried exactly through
+$N^{(k)},T^{(k)}$.
+
+\section{Inference}
+\label{sec:inference}
+
+\paragraph{Coupled M-step ($\gamma_k{=}1$): $L_1$-proximal ascent.} Maximise
+$\ell_k(h,J)-\lambda\sum_{a<b}|J_{ab}|$ by proximal gradient: a smooth step on
+$(h,J)$ using \eqref{eq:grad}, followed by soft-thresholding of the coupling,
+\begin{equation}
+\label{eq:soft}
+J_{ab}\leftarrow\soft_{\eta\lambda}\!\Big(J_{ab}+\eta\,\tfrac{\partial\ell_k}{\partial J_{ab}}\Big),
+\qquad \soft_{\tau}(x)=\mathrm{sign}(x)\max(|x|-\tau,0),
+\end{equation}
+with step $\eta$ (a diagonal/backtracking choice keeps it stable given the pair-flux
+Hessian). The threshold zeroes every pair whose net flux imbalance is below $\lambda$, so
+an active class keeps only the residue pairs it genuinely needs --- e.g.\ the acid/base
+salt-bridge cells for the charge class. The fields update in closed form as usual
+($h\!\propto$ log-composition plus the Gaussian shrinkage).
+
+\paragraph{Null branch ($\gamma_k{=}0$): $J{=}0$.} Fit $h$ alone; the class is a
+product-of-marginals composition class, scored by $\ell_k(h,0)$.
+
+\paragraph{The null decision.} Choose $\gamma_k$ by the (penalised) evidence contrast
+\begin{equation}
+\label{eq:decision}
+\gamma_k=1\iff
+\underbrace{\big[\ell_k(\hat h_1,\hat J)-\lambda\!\sum_{a<b}\!|\hat J_{ab}|\big]}_{\text{coupled fit}}
+-\underbrace{\ell_k(\hat h_0,0)}_{\text{null fit}}
+\;>\;\log\tfrac{1-\rho}{\rho}-\tbinom{A}{2}\log\tfrac{\lambda}{2},
+\end{equation}
+i.e.\ the coupling turns on only when its likelihood gain clears the log-odds of the
+null prior plus the slab's normalisation. A soft (variational/EM) treatment replaces the
+hard rule by the responsibility
+$q(\gamma_k{=}1)=\sigma\big(\text{LHS}-\text{RHS of \eqref{eq:decision}}\big)$
+and marginalises it in the class-mixing update; a Laplace approximation of the slab
+evidence around $\hat J$ sharpens the RHS. Either way \eqref{eq:decision} is a
+Bayes-factor test for ``does this class carry phylogenetically-supported coupling''.
+
+\paragraph{Hyperparameters.} With $\rho\sim\mathrm{Beta}(a_\rho,b_\rho)$, the conditional
+update is $\hat\rho=(a_\rho-1+\sum_k q(\gamma_k))/(a_\rho+b_\rho-2+K)$; $\lambda$ updates
+from its Gamma prior against $\sum_k\gamma_k\sum_{a<b}|J^{(k)}_{ab}|$. Both are cheap and
+make the null-enrichment and sparsity data-driven.
+
+\section{The read-off: coupling that survives as phylogenetic signal}
+\label{sec:readoff}
+
+The point of the prior is what it lets us report. After fitting:
+\begin{itemize}
+\item $\sum_k q(\gamma_k{=}1)$ --- the expected number of \emph{interaction} classes (as
+opposed to composition classes); with strong null-enrichment we expect this to be small,
+consistent with the $\sim$$0.008$-nat coupling gain.
+\item Per class, the surviving support $\{(a,b):\hat J^{(k)}_{ab}\ne0\}$ --- the residue
+pairs the data keep after $L_1$; the charge/salt-bridge cells should dominate, matching
+the sign-consistent charge axis that survives the washout (paper2b, \S\,axes).
+\item The total selected coupling mass $\sum_k w_k\,q(\gamma_k)\,\|\hat J^{(k)}\|_1$ and the
+held-out likelihood gain over the all-null ($\gamma\equiv0$) fit --- a single, honest
+number for ``how much coupling is real'', now defended by a model that was free to keep
+none.
+\end{itemize}
+Because the null is nested ($\gamma\equiv0$ is the product-of-marginals mixture) and the
+prior is free to select it, the spiked model cannot do worse than the null on the training
+objective and reports coupling only where it is paid for --- exactly the discipline the
+small measured coupling gain calls for.
+
+\section{Relation to prior work and to the rest of the paper}
+
+The slab is the phylogenetic counterpart of sparse-$L_1$ DCA (plmDCA), with the static
+pseudolikelihood replaced by the exact tree/branch/rate likelihood \eqref{eq:ell} and the
+partition-function cancellation of \eqref{eq:generator}; the spike adds the
+group-sparse/zero-inflated ``is this class an interaction class'' decision that a flat DCA
+prior lacks. Against the paper's models: the all-null limit ($\gamma\equiv0$) is the
+mixture of products-of-marginals (the additive-\Potts\ null of \S\,axes); switching every
+$\gamma_k{=}1$ with $\lambda{=}0$ recovers the unpenalised Metropolis--\Potts\ mixture of
+\texttt{tab:pairfit}; and the spiked prior interpolates, selecting per class. It replaces
+the abandoned lumpable mixture entirely: rather than constraining the dynamics (which, as
+shown, forces coupling out of the stationary), it constrains the \emph{prior over
+couplings}, which is where the small surviving signal should be adjudicated.
+
+\end{document}

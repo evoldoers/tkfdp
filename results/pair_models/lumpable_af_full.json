@@ -1,0 +1,13 @@
+{
+  "corpus": "data/cherry_counts_af_full",
+  "results": {
+    "lumpable": {
+      "ll": -67442313.7224763,
+      "per_count_ll": -1.3508116513698032,
+      "val_per_count_ll": -1.3247574872032695,
+      "n_params": 32870,
+      "time_s": 2114.401093006134,
+      "monotone": true
+    }
+  }
+}

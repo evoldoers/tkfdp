@@ -1,0 +1,118 @@
+\documentclass[10pt]{article}
+\usepackage[margin=0.65in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{microtype}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{3pt}
+\newcommand{\A}{\mathcal A}
+\newcommand{\Rcal}{\mathcal R}
+\newcommand{\Wcal}{\mathcal W}
+
+\begin{document}
+\small
+\begin{center}
+{\large\bf Path ELBO for a Potts CTBN under an independent GTR bridge}
+\end{center}
+
+Let \(x=(x_1,\ldots,x_L)\in\A^L\), \(|\A|=20\), with Potts target
+\[
+ \Pi(x)=Z^{-1}e^{-E(x)},\qquad
+ E(x)=-\sum_i h_i(x_i)-\sum_{i<j}J_{ij}(x_i,x_j).
+\]
+Take a reversible one-site GTR proposal
+\(R_{ab}=s_{ab}\rho_b\) (\(a\ne b\)), \(s_{ab}=s_{ba}\), and the independent
+proposal generator
+\[
+ \Rcal=\bigoplus_{i=1}^L R .
+\]
+For \(y=x^{i:b}\) (site \(i\), \(a=x_i\to b\)), use the square-root
+Metropolis-symmetric target rate
+\[
+ \Wcal_{x,y}
+ =\Rcal_{x,y}\sqrt{\frac{\Pi(y)\Rcal_{y,x}}{\Pi(x)\Rcal_{x,y}}}
+ =s_{ab}\sqrt{\rho_a\rho_b}\,
+   e^{-\Delta_i^bE(x)/2},
+ \qquad \Delta_i^bE(x)=E(x^{i:b})-E(x).
+\]
+Write \(r(x)=\sum_{i,b\ne x_i}R_{x_i b}\) and
+\(w(x)=\sum_{i,b\ne x_i}\Wcal_{x,x^{i:b}}\).
+
+For one interval of length \(T\), condition the proposal on global endpoints
+\(X(0)=A,\ X(T)=B\), giving the independent GTR bridge \(Q_{AB}\).
+The path ELBO for the target endpoint likelihood is
+\[
+\boxed{\;
+ \mathcal L_{AB}
+ =\log [e^{T\Rcal}]_{AB}
+ +\sum_{x,i,b\ne x_i}\bar N^{AB}_{x,i:b}
+       \log\frac{\Wcal_{x,x^{i:b}}}{R_{x_i b}}
+ -\sum_x\bar T_x^{AB}[w(x)-r(x)] \; }
+\]
+with
+\[
+ \log\frac{\Wcal_{x,x^{i:b}}}{R_{ab}}
+ =\frac12\left[-\Delta_i^bE(x)+\log\frac{\rho_a}{\rho_b}\right].
+\]
+Crucially, \(\bar T_x^{AB}\) and \(\bar N^{AB}_{x,i:b}\) are \emph{joint}
+Holmes--Rubin statistics of the \(20^L\)-state independent product chain;
+they do not factor into products of one-site expected dwell times/counts.
+
+For the spectral form, symmetrize
+\[
+ H=D_\rho^{1/2}RD_\rho^{-1/2}=U\Lambda U^\top,\qquad
+ \Lambda=\operatorname{diag}(\lambda_0,\ldots,\lambda_{19}),
+\]
+and for \(\boldsymbol r=(r_1,\ldots,r_L)\) define
+\[
+ \Lambda_{\boldsymbol r}=\sum_i\lambda_{r_i},\qquad
+ \Psi_{\boldsymbol r}(x)=\prod_i U_{x_i r_i},\qquad
+ Z_{AB}^{(R)}
+ =\sum_{\boldsymbol r}\Psi_{\boldsymbol r}(A)\Psi_{\boldsymbol r}(B)
+ e^{T\Lambda_{\boldsymbol r}}.
+\]
+The Holmes--Rubin divided-difference kernel is
+\[
+ K_T(\alpha,\beta)
+ =\int_0^T e^{\alpha t}e^{\beta(T-t)}\,dt
+ =
+ \begin{cases}
+ \dfrac{e^{\alpha T}-e^{\beta T}}{\alpha-\beta},&\alpha\ne\beta,\\[5pt]
+ Te^{\alpha T},&\alpha=\beta.
+ \end{cases}
+\]
+Then
+\[
+ \boxed{\;
+ \bar T_x^{AB}
+ =\frac{1}{Z_{AB}^{(R)}}
+ \sum_{\boldsymbol r,\boldsymbol s}
+ \Psi_{\boldsymbol r}(A)\Psi_{\boldsymbol r}(x)
+ \Psi_{\boldsymbol s}(x)\Psi_{\boldsymbol s}(B)
+ K_T(\Lambda_{\boldsymbol r},\Lambda_{\boldsymbol s}) \;}
+\]
+and, for \(a=x_i\),
+\[
+ \boxed{\;
+ \bar N_{x,i:b}^{AB}
+ =\frac{s_{ab}\sqrt{\rho_a\rho_b}}{Z_{AB}^{(R)}}
+ \sum_{\boldsymbol r,\boldsymbol s}
+ \Psi_{\boldsymbol r}(A)\Psi_{\boldsymbol r}(x)
+ \Psi_{\boldsymbol s}(x^{i:b})\Psi_{\boldsymbol s}(B)
+ K_T(\Lambda_{\boldsymbol r},\Lambda_{\boldsymbol s}) \;.}
+\]
+
+Thus the ELBO is obtained by inserting these two expressions above.  Identical
+site generators create substantial spectral degeneracy:
+\(\Lambda_{\boldsymbol r}\) depends only on the mode counts
+\(n_k=\#\{i:r_i=k\}\),
+\[
+ \Lambda_{\boldsymbol r}=\sum_{k=0}^{19}n_k\lambda_k,\qquad \sum_k n_k=L.
+\]
+Hence the divided-difference kernel has at most
+\(\binom{L+19}{19}\) distinct product eigenvalue sums (generically), rather
+than \(20^L\).  The kernel values can therefore be grouped by eigenvalue sum,
+while the full labelled endpoints and Potts interactions remain in the
+corresponding grouped spectral coefficients.  For multiple endpoint intervals,
+sum \(\mathcal L_{AB}\) over intervals.
+
+\end{document}

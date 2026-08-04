@@ -178,6 +178,12 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--methods", nargs="+",
                     default=["baseline_fsa", "muscle", "mafft", "ref"])
+    ap.add_argument("--pre-sinkhorn", action="store_true",
+                    help="Disable A1 reversibility (use legacy "
+                         "pre-2026-06-27 joint stationary). Only for "
+                         "reproducing pre-A1 composite-likelihood "
+                         "numbers against released non-reversible "
+                         "checkpoints.")
     args = ap.parse_args()
 
     in_path = args.bali_root / "in" / args.bench
@@ -289,6 +295,7 @@ def main():
                 alpha_z_init=args.alpha_z_init,
                 seed=args.seed,
                 verbose=True,
+                reversible=not args.pre_sinkhorn,
             )
             composites[m] = res
             print(f"    log_p_total = {res.log_p_total:.4f}  "

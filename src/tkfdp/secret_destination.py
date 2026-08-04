@@ -107,6 +107,25 @@ def dirichlet_posterior_mean(prior_alpha: np.ndarray,
     return post / post.sum()
 
 
+def dirichlet_posterior_mode(prior_alpha: np.ndarray,
+                               N_real: np.ndarray,
+                               N_ghost: np.ndarray) -> np.ndarray:
+    """MAP MODE of the Dirichlet posterior on pi: pi ∝ max(post - 1, 0), where
+    post = prior_alpha + N_real + N_ghost.
+
+    For a SPARSITY-inducing prior (prior_alpha < 1) the mode sits on the simplex
+    boundary and drives low-count components to EXACTLY 0: the (post - 1) term goes
+    negative and MUST be clamped nonnegative (this is the required clamp, since with
+    alpha<1 the closed-form normalizer's data+alpha-1 terms can be negative). Falls
+    back to the posterior mean if every component clamps to 0 (degenerate)."""
+    post = dirichlet_posterior(prior_alpha, N_real, N_ghost)
+    m = np.maximum(post - 1.0, 0.0)
+    s = m.sum()
+    if s < 1e-12:                        # all clamped -> mode undefined; use mean
+        return post / post.sum()
+    return m / s
+
+
 def log_multivariate_beta(alpha: np.ndarray) -> float:
     """log B(alpha) = sum log Γ(alpha_i) - log Γ(sum alpha_i)."""
     return float(np.sum(gammaln(alpha)) - gammaln(np.sum(alpha)))

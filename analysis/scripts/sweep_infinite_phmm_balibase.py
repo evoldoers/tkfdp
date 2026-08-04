@@ -257,8 +257,11 @@ def _run_one_pair(x_seq, y_seq, t, ins_rate, del_rate, ext,
                    alpha_z, alpha_z_ladder, n_chains, swap_every,
                    n_sweeps, n_burnin, seed,
                    prepop_top_k=-1, prepop_chunk=256,
-                   prepop_mem_budget_mib=2048.0):
+                   prepop_mem_budget_mib=2048.0, mixfrag=None):
     """Dispatch a single pair to the right sampler entry point.
+
+    ``mixfrag``: optional ``(exts, weights)`` -> MixFrag(F) base Pair HMM
+    instead of TKF92 (``ext`` is then ignored; pass lam/mu as ins/del_rate).
 
     Returns (Q_prime, Q_baseline, log_F0, diag_obj, mode_str)
     where mode_str is one of 'replica_exchange', 'multi_chain', 'single_chain'.
@@ -273,6 +276,7 @@ def _run_one_pair(x_seq, y_seq, t, ins_rate, del_rate, ext,
         n_sweeps=n_sweeps, n_burnin=n_burnin,
         prepop_top_k=prepop_top_k, prepop_chunk=prepop_chunk,
         prepop_mem_budget_mib=prepop_mem_budget_mib,
+        mixfrag=mixfrag,
     )
 
     if alpha_z_ladder is not None and len(alpha_z_ladder) > 1:
@@ -368,7 +372,8 @@ def run_family(family: str, n_sweeps: int, n_burnin: int,
                prepop_mem_budget_mib: float = 2048.0,
                pair_subset=None,
                checkpoint_path: str | None = None,
-               seed_base: int = 0):
+               seed_base: int = 0,
+               mixfrag=None):
     """Run the MCMC sampler on every pair of a family.  Each pair runs
     independently; we do not parallelise across pairs (the per-pair
     cache fits but the sum-across-pairs does not on a single GPU).
@@ -550,6 +555,7 @@ def run_family(family: str, n_sweeps: int, n_burnin: int,
                 seed=int(seed_base) + rep,
                 prepop_top_k=prepop_top_k, prepop_chunk=prepop_chunk,
                 prepop_mem_budget_mib=prepop_mem_budget_mib,
+                mixfrag=mixfrag,
             )
             replicate_results.append((np.asarray(Q_p), np.asarray(Q_b),
                                        diag_obj, mode))
@@ -726,6 +732,11 @@ def main():
     p.add_argument('--ext', type=float, default=None,
                    help='TKF92 fragment-extension probability r; '
                    'same default policy.')
+    p.add_argument('--mixfrag-npz', type=str, default=None,
+                   help='Path to a train_mixfrag_cherry_em .npz fit. If given, '
+                   'the base Pair HMM is MixFrag(F) (exts/weights from the '
+                   'npz; lam/mu override --ins-rate/--del-rate; --ext ignored). '
+                   'The Potts boost still comes from --checkpoint.')
     p.add_argument('--tkf92-params-json', type=str,
                    default=str(TKFMIXDOM / 'experiments'
                                 / 'tkf92_fitted_params.json'),
@@ -766,7 +777,20 @@ def main():
     if args.n_re_replicates is None:
         args.n_re_replicates = 4 if args.mcmc_diagnostics else 1
 
-    if args.ins_rate is None or args.del_rate is None or args.ext is None:
+    mixfrag = None
+    if args.mixfrag_npz is not None:
+        z = np.load(args.mixfrag_npz)
+        exts = np.asarray(z['exts'], np.float64)
+        weights = np.asarray(z['weights'], np.float64)
+        ins_rate = float(z['lam']); del_rate = float(z['mu'])
+        ext = float(exts[0])           # unused under MixFrag, kept for the API
+        mixfrag = (exts, weights)
+        print(f"MixFrag(F={len(exts)}) base from {args.mixfrag_npz}: "
+              f"lam={ins_rate:.5f} mu={del_rate:.5f} "
+              f"exts={np.array2string(exts, precision=4)} "
+              f"weights={np.array2string(weights, precision=4)}; "
+              f"Potts boost from {args.checkpoint}", flush=True)
+    elif args.ins_rate is None or args.del_rate is None or args.ext is None:
         fitted = json.loads(Path(args.tkf92_params_json).read_text())
         ins_rate = (args.ins_rate if args.ins_rate is not None
                      else float(fitted['ins_rate']))
@@ -912,7 +936,8 @@ def main():
                              prepop_mem_budget_mib=args.prepop_mem_budget_mib,
                              pair_subset=pair_subset,
                              checkpoint_path=args.checkpoint,
-                             seed_base=args.seed)
+                             seed_base=args.seed,
+                             mixfrag=mixfrag)
             res['wall_time_s'] = time.time() - t0
             all_results.append(res)
             n_pairs_total += res.get('n_pairs_done', 0)

@@ -418,13 +418,25 @@ def _build_cherry_setup(
         Q_lg, pi_lg, boost_state,
         ins_rate: float, del_rate: float, ext: float,
         alpha_z: float,
+        reversible: bool = True,
         ) -> MCMCSetup:
-    """Wrap precompute_partial_forward."""
-    return precompute_partial_forward(
+    """Wrap precompute_partial_forward.
+
+    Under A1 / reversible mode (the 2026-06-27 default) the M-boost
+    tensor that backs the AIS chain is built with the Sinkhorn-corrected
+    joint stationary; the per-cherry composite log-likelihood is then
+    consistent with the model spec and detailed balance holds at the
+    indel seam. Set ``reversible=False`` only to reproduce pre-A1
+    composite-likelihood numbers against released non-reversible
+    checkpoints.
+    """
+    setup = precompute_partial_forward(
         x_seq=x_seq, y_seq=y_seq, t=t,
         ins_rate=ins_rate, del_rate=del_rate, ext=ext,
         Q_lg=Q_lg, pi_lg=pi_lg, boost_state=boost_state,
         alpha_z=alpha_z)
+    setup.reversible = bool(reversible)
+    return setup
 
 
 def composite_loglik_cherry(
@@ -446,6 +458,7 @@ def composite_loglik_cherry(
         alpha_z_init: float = 1e8,
         seed: int = 0,
         setup: Optional[MCMCSetup] = None,
+        reversible: bool = True,
         ) -> Tuple[float, float, float, AISDiagnostics, MCMCSetup]:
     """Composite log-likelihood of one cherry alignment under the model.
 
@@ -459,7 +472,7 @@ def composite_loglik_cherry(
         setup = _build_cherry_setup(
             x_seq, y_seq, t, Q_lg, pi_lg, boost_state,
             ins_rate=ins_rate, del_rate=del_rate, ext=ext,
-            alpha_z=alpha_z)
+            alpha_z=alpha_z, reversible=reversible)
     path = msa_pair_to_path(msa_row_x, msa_row_y)
     log_pi = _path_log_prob(path, setup)
     log_Z_E, diag = estimate_log_Z_E(
@@ -516,6 +529,7 @@ def composite_loglik_msa(
         alpha_z_init: float = 1e8,
         seed: int = 0,
         verbose: bool = False,
+        reversible: bool = True,
         ) -> MSAComposite:
     """Composite (cherry) log-likelihood of an MSA under the infinite Pair HMM.
 
@@ -600,7 +614,7 @@ def composite_loglik_msa(
             setup = _build_cherry_setup(
                 x_arr, y_arr, t, Q_lg, pi_lg, bs,
                 ins_rate=ins_rate, del_rate=del_rate, ext=ext,
-                alpha_z=alpha_z)
+                alpha_z=alpha_z, reversible=reversible)
             setups_cache[(i, j)] = setup
             setup_secs = time.time() - t_setup
         path = msa_pair_to_path(rx, ry)

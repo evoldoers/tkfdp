@@ -1,0 +1,46 @@
+{
+  "rows": [
+    {
+      "twoP": 2,
+      "asym_val": -2.656765868972262,
+      "sym_val": -2.6527499468115447,
+      "delta_asym_minus_sym": -0.0040159221607174445,
+      "asym_train": -2.6818914400593,
+      "sym_train": -2.6778810344256128,
+      "force_symmetry_cost_val": 0.015486875634026731,
+      "weighted_sym_kl": 0.29795357704555986,
+      "weighted_asym_tv": 0.31338711514937123,
+      "asym_pi_params": 399,
+      "sym_pi_params": 418,
+      "asym_monotone": true
+    },
+    {
+      "twoP": 4,
+      "asym_val": -2.6337948752245937,
+      "sym_val": -2.6273422959378916,
+      "delta_asym_minus_sym": -0.006452579286702065,
+      "asym_train": -2.6588449873224826,
+      "sym_train": -2.652304278914561,
+      "force_symmetry_cost_val": 0.020942388164667314,
+      "weighted_sym_kl": 0.5130897585581754,
+      "weighted_asym_tv": 0.38332560158854206,
+      "asym_pi_params": 798,
+      "sym_pi_params": 836,
+      "asym_monotone": true
+    },
+    {
+      "twoP": 8,
+      "asym_val": -2.6067183247463572,
+      "sym_val": -2.6019076210411196,
+      "delta_asym_minus_sym": -0.004810703705237618,
+      "asym_train": -2.631659712277097,
+      "sym_train": -2.6266536326556933,
+      "force_symmetry_cost_val": 0.022902660759630322,
+      "weighted_sym_kl": 0.6566201304624115,
+      "weighted_asym_tv": 0.42589557871947115,
+      "asym_pi_params": 1596,
+      "sym_pi_params": 1672,
+      "asym_monotone": true
+    }
+  ]
+}

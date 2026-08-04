@@ -1,0 +1,219 @@
+\documentclass[10pt]{article}
+\usepackage[margin=0.72in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools,bm,booktabs,microtype}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\setlist{nosep,leftmargin=*}
+\newcommand{\R}{\mathbb R}
+\newcommand{\one}{\mathbf 1}
+\newcommand{\KL}{D_{\mathrm{KL}}}
+\newcommand{\odotm}{\mathbin{\odot}}
+\newtheorem{prop}{Proposition}
+\newtheorem{remark}{Remark}
+\title{An EM M-Step for Reversible, Exchangeable, Lumpable Two-Component CTMCs}
+\author{}
+\date{}
+\begin{document}
+\maketitle
+\vspace{-1.2em}
+
+\paragraph{Purpose.}
+This note gives a compact implementation-level formulation of the EM M-step for a continuous-time Markov chain (CTMC) on ordered pairs, under component exchangeability, reversibility, and strong lumpability of either coordinate.  All stationary masses, marginal rates, and joint transition fluxes are estimated.  The central computational fact is that, conditional on the stationary distribution, the constrained flux update is a smooth convex program with an explicit rational KKT representation and a sparse dual system.  Joint estimation of the stationary distribution is nonlinear and generally has no global closed form; a generalized EM/ECM scheme alternates an exact conditional flux update with a constrained stationary-mass update.
+
+\section{Model, symmetries, and orbit-flux coordinates}
+Let the component alphabet be $[n]=\{1,\dots,n\}$ and the joint state space be $\mathcal X=[n]^2$.  Write $x=(i,j)$ and $y=(k,l)$.  The generator $Q$ has off-diagonal rates $Q_{xy}\ge0$ and $Q_{xx}=-\sum_{y\ne x}Q_{xy}$.  Let $\pi_x=\pi_{ij}>0$, $\sum_x\pi_x=1$, with component exchangeability
+\begin{equation}
+\pi_{ij}=\pi_{ji}.
+\end{equation}
+Introduce stationary off-diagonal fluxes
+\begin{equation}
+F_{xy}=\pi_xQ_{xy},\qquad x\ne y.
+\end{equation}
+Reversibility and exchangeability are
+\begin{equation}
+F_{ij,kl}=F_{kl,ij},\qquad F_{ij,kl}=F_{ji,lk}.
+\end{equation}
+Let $R(i,j;k,l)=(k,l;i,j)$ and $E(i,j;k,l)=(j,i;l,k)$.  The group $G=\{e,R,E,RE\}\cong V_4$ acts on directed off-diagonal transitions.  For each orbit $o\in\mathcal O$ introduce one nonnegative variable $\phi_o$, and set
+\begin{equation}
+F_{ij,kl}=\phi_{\mathcal O(i,j;k,l)}.
+\end{equation}
+All reversibility and exchangeability equalities are then automatic.  Burnside's lemma gives
+\begin{equation}
+N_\phi:=|\mathcal O|=\frac{n^4+n^2-2n}{4}.
+\end{equation}
+The symmetric stationary distribution has
+\begin{equation}
+N_\pi=\frac{n(n+1)}2-1
+\end{equation}
+free coordinates after normalization.  Define component marginals $\rho_i=\sum_j\pi_{ij}$ and symmetric marginal stationary edge fluxes
+\begin{equation}
+g_{ik}=g_{ki}\ge0,\qquad i<k,
+\end{equation}
+so that the marginal generator is $A_{ik}=g_{ik}/\rho_i$.  There are $N_g=n(n-1)/2$ such variables.
+
+Strong lumpability of the first coordinate is equivalent to
+\begin{equation}\label{eq:lump}
+\sum_l F_{ij,kl}=\pi_{ij}A_{ik}=\frac{\pi_{ij}}{\rho_i}g_{ik},\qquad i\ne k,
+\end{equation}
+and exchangeability then implies lumpability of the second coordinate.  Let $B$ be the sparse orbit-incidence matrix satisfying
+\begin{equation}
+(B\phi)_{ijk}=\sum_lF_{ij,kl},\qquad i\ne k,
+\end{equation}
+and let $D(\pi)$ be the sparse matrix satisfying
+\begin{equation}
+(D(\pi)g)_{ijk}=\frac{\pi_{ij}}{\rho_i}g_{ik}.
+\end{equation}
+Then lumpability is compactly
+\begin{equation}\label{eq:compactlump}
+B\phi=D(\pi)g.
+\end{equation}
+The number of scalar rows before removing dependencies is $n^2(n-1)$.  The generic rank of the joint $(\phi,g)$ equality system for fixed $\pi$ is
+\begin{equation}
+N_c=\binom n2(2n-1)=\frac{n(n-1)(2n-1)}2.
+\end{equation}
+Thus the conditional flux problem has $N_\phi+N_g$ nonnegative variables and $N_c$ independent linear equalities; each row of $B$ has at most $n$ transition incidences.  Orbit lookup plus sparse matrix products are sufficient for implementation.
+
+\section{Expected complete-data likelihood}
+Suppose the E-step supplies expected transition counts $N_{xy}\ge0$ for every $x\ne y$, expected dwell times $T_x\ge0$, and optionally expected initial-state counts $M_x\ge0$ (for one trajectory, $\sum_xM_x=1$; for multiple trajectories it equals their number).  The expected complete-data log-likelihood, up to constants independent of $(Q,\pi)$, is
+\begin{equation}\label{eq:Qq}
+\mathcal Q(Q,\pi)=\sum_{x\ne y}N_{xy}\log Q_{xy}-\sum_xT_x\sum_{y\ne x}Q_{xy}+\sum_xM_x\log\pi_x.
+\end{equation}
+Since $Q_{xy}=F_{xy}/\pi_x$, define $N_{x+}=\sum_{y\ne x}N_{xy}$ and obtain
+\begin{equation}\label{eq:QFpi}
+\mathcal Q(F,\pi)=\sum_{x\ne y}N_{xy}\log F_{xy}-\sum_xN_{x+}\log\pi_x-\sum_x\frac{T_x}{\pi_x}\sum_{y\ne x}F_{xy}+\sum_xM_x\log\pi_x.
+\end{equation}
+Aggregate over Klein orbits:
+\begin{equation}
+C_o:=\sum_{(x,y)\in o}N_{xy},\qquad
+H_o(\pi):=\sum_{(x,y)\in o}\frac{T_x}{\pi_x}.
+\end{equation}
+Then
+\begin{equation}\label{eq:orbitobj}
+\mathcal Q(\phi,\pi)=\sum_o\bigl[C_o\log\phi_o-H_o(\pi)\phi_o\bigr]+\sum_x(M_x-N_{x+})\log\pi_x.
+\end{equation}
+The full M-step is
+\begin{equation}\label{eq:fullM}
+\begin{aligned}
+\max_{\pi,\phi,g}\quad &\mathcal Q(\phi,\pi)\\
+\text{s.t.}\quad &B\phi=D(\pi)g,\\
+&\phi\ge0,\quad g\ge0,\quad \pi_{ij}=\pi_{ji}>0,\quad \sum_{ij}\pi_{ij}=1.
+\end{aligned}
+\end{equation}
+Reversibility ensures that the resulting $\pi$ is stationary for $Q_{xy}=F_{xy}/\pi_x$.  The initial-state term may be omitted when the initial distribution is not modeled as stationary or is treated separately.
+
+\paragraph{No global closed form.}
+Problem \eqref{eq:fullM} is nonlinear because both $H_o(\pi)$ and $D(\pi)$ contain reciprocal or ratio functions of $\pi$.  It is not, in general, a single convex program in $(\pi,\phi,g)$ and has no generic closed-form solution.  Conditional on $\pi$, however, it becomes a strictly concave maximization over a polyhedron and admits an explicit multiplier representation.
+
+\section{Conditional flux M-step for fixed $\pi$}
+Fix $\pi>0$.  Then $H=H(\pi)$ and $D=D(\pi)$ are fixed, and solve
+\begin{equation}\label{eq:condM}
+\begin{aligned}
+\max_{\phi,g}\quad &\sum_o(C_o\log\phi_o-H_o\phi_o)\\
+\text{s.t.}\quad &B\phi-Dg=0,
+\qquad \phi\ge0,\quad g\ge0.
+\end{aligned}
+\end{equation}
+For $C_o>0$ the objective is strictly concave in $\phi_o$.  If an interior optimum has $\phi>0$ and $g>0$, introduce multipliers $\lambda$ for $B\phi-Dg=0$.  Stationarity gives
+\begin{align}
+\frac{C_o}{\phi_o}-H_o-(B^\top\lambda)_o&=0,\label{eq:phikkt}\\
+D^\top\lambda&=0.\label{eq:gkkt}
+\end{align}
+Therefore
+\begin{equation}\label{eq:rational}
+\boxed{\displaystyle \phi_o(\lambda)=\frac{C_o}{H_o+(B^\top\lambda)_o}},
+\end{equation}
+with the domain condition $H+B^\top\lambda>0$, and $\lambda$ is determined by
+\begin{equation}\label{eq:dualsystem}
+B\left(\frac{C}{H+B^\top\lambda}\right)=Dg,
+\qquad D^\top\lambda=0.
+\end{equation}
+Here and below fractions are componentwise.  Boundary values $g_{ik}=0$ are handled by complementary slackness: $D^\top\lambda\le0$ or $\ge0$ according to the chosen Lagrangian sign convention, with equality on positive edges.
+
+One may either solve the primal problem \eqref{eq:condM} directly with a sparse interior-point method, or eliminate $\phi$ using \eqref{eq:rational} and solve the smooth dual system.  With fixed target right-hand side $b$ (equivalently fixed $g$), the convex dual minimization can be written, up to constants, as
+\begin{equation}\label{eq:dual}
+\min_\lambda\quad b^\top\lambda-\sum_oC_o\log\bigl(H_o+(B^\top\lambda)_o\bigr),
+\qquad H+B^\top\lambda>0,
+\end{equation}
+with gradient and Hessian
+\begin{align}
+\nabla\Psi(\lambda)&=b-B\phi(\lambda),\\
+\nabla^2\Psi(\lambda)&=B\,\mathrm{diag}\!\left(\frac{C_o}{[H_o+(B^\top\lambda)_o]^2}\right)B^\top.
+\end{align}
+After removing dependent rows or fixing a dual gauge, damped Newton is immediate.  A row-coordinate update $\lambda_a\leftarrow\lambda_a+\delta$ solves the monotone scalar equation
+\begin{equation}\label{eq:coord}
+\sum_oB_{ao}\frac{C_o}{d_o+B_{ao}\delta}=b_a,
+\qquad d_o=H_o+(B^\top\lambda)_o,
+\end{equation}
+by safeguarded Newton or bisection.  This is the direct analogue of a Sinkhorn/IPFP marginal correction, except that Poisson likelihood produces rational rather than exponential scaling.  In the absence of lumpability constraints, \eqref{eq:rational} reduces to the closed form
+\begin{equation}
+\widehat\phi_o=C_o/H_o.
+\end{equation}
+
+\section{Updating the stationary distribution}
+Fix $(\phi,g)$ and define the exit flux from joint state $x$,
+\begin{equation}
+r_x(\phi):=\sum_{y\ne x}F_{xy}.
+\end{equation}
+The part of \eqref{eq:orbitobj} depending directly on $\pi$ is
+\begin{equation}\label{eq:piobjfixedF}
+\mathcal Q_\pi(\pi\mid\phi)=\sum_x\left[(M_x-N_{x+})\log\pi_x-\frac{T_xr_x}{\pi_x}\right],
+\end{equation}
+but the updated $\pi$ must also satisfy the lumpability relation $B\phi=D(\pi)g$.  Consequently the exact conditional $\pi$-step is
+\begin{equation}\label{eq:pistep}
+\begin{aligned}
+\max_\pi\quad &\sum_x\left[(M_x-N_{x+})\log\pi_x-\frac{T_xr_x}{\pi_x}\right]\\
+\text{s.t.}\quad &D(\pi)g=B\phi,\\
+&\pi_{ij}=\pi_{ji}>0,
+\qquad \sum_{ij}\pi_{ij}=1.
+\end{aligned}
+\end{equation}
+This is a low-dimensional smooth constrained problem in $n(n+1)/2-1$ variables, but it need not be globally concave.  A convenient unconstrained positivity/normalization parameterization uses symmetric logits $u_{ij}=u_{ji}$ for $i\le j$:
+\begin{equation}\label{eq:softmax}
+\pi_{ij}(u)=\frac{e^{u_{ij}}}{\sum_{a\le b}w_{ab}e^{u_{ab}}},
+\qquad w_{aa}=1,
+\quad w_{ab}=2\ (a<b).
+\end{equation}
+One can then impose $D(\pi(u))g=B\phi$ by an augmented Lagrangian or a sequential quadratic programming/trust-region constrained solver.  Analytic derivatives are simple.  For a single state $x$ and $a_x=M_x-N_{x+}$, $c_x=T_xr_x$,
+\begin{equation}
+f_x(\pi_x)=a_x\log\pi_x-c_x/\pi_x,
+\quad
+f_x'(\pi_x)=a_x/\pi_x+c_x/\pi_x^2,
+\quad
+f_x''(\pi_x)=-a_x/\pi_x^2-2c_x/\pi_x^3.
+\end{equation}
+The derivative of $D(\pi)g$ follows from
+\begin{equation}
+\frac{\partial}{\partial\pi_{ab}}\left(\frac{\pi_{ij}}{\rho_i}g_{ik}\right)
+=g_{ik}\frac{\rho_i\,\partial\pi_{ij}-\pi_{ij}\,\partial\rho_i}{\rho_i^2},
+\qquad \rho_i=\sum_j\pi_{ij},
+\end{equation}
+with the symmetric-coordinate multiplicities induced by \eqref{eq:softmax}.
+
+\section{A practical generalized EM/ECM algorithm}
+A robust implementation alternates conditional maximizations or ascent steps:
+\begin{enumerate}
+\item \textbf{E-step.} Compute $N_{xy}$, $T_x$, and optionally $M_x$ under the current parameters.
+\item \textbf{Orbit aggregation.} Form $C_o$ and the sparse orbit-incidence map $B$ once; for the current $\pi$, form $H_o(\pi)$ and $D(\pi)$.
+\item \textbf{Flux CM-step.} With $\pi$ fixed, solve \eqref{eq:condM} to global optimality by a sparse primal solver or the rational dual equations \eqref{eq:rational}--\eqref{eq:dualsystem}.  Recover $F$ from $\phi$.
+\item \textbf{Stationary-mass CM-step.} With $(\phi,g)$ fixed, increase \eqref{eq:piobjfixedF} subject to \eqref{eq:pistep}, using logits \eqref{eq:softmax} and a constrained Newton/SQP or augmented-Lagrangian method.
+\item Repeat the two CM-steps until the EM auxiliary function \eqref{eq:orbitobj} no longer increases materially; then set $Q_{xy}=F_{xy}/\pi_x$ and $Q_{xx}=-\sum_{y\ne x}Q_{xy}$.
+\end{enumerate}
+If each conditional step exactly maximizes its block, this is an ECM algorithm and the observed-data likelihood is nondecreasing under the usual EM regularity assumptions.  If the $\pi$-step merely produces sufficient ascent while preserving feasibility, it is a generalized EM algorithm and retains monotonicity.  Because the joint M-step is nonconvex, convergence is to a stationary point, not necessarily a global maximizer; multiple starts are appropriate.
+
+\paragraph{Alternative joint solve.}
+Instead of alternating, maximize \eqref{eq:fullM} directly in variables $(u,\log\phi,\log g)$ with equality constraints \eqref{eq:compactlump}.  This is often convenient with automatic differentiation and a sparse interior-point/SQP solver.  The block structure above remains useful for initialization and preconditioning: initialize $\phi_o=C_o/H_o(\pi)$, project or optimize onto $B\phi=D(\pi)g$, then release $\pi$.
+
+\section{Closed forms and relation to generalized Sinkhorn}
+The useful formulas are summarized by
+\begin{equation}
+\begin{array}{rcll}
+\text{unconstrained CTMC}&&Q_{xy}=N_{xy}/T_x,&\\[2mm]
+\text{reversible/exchangeable, fixed }\pi&&\phi_o=C_o/H_o(\pi),&\\[2mm]
+\text{plus lumpability, fixed }\pi&&
+\displaystyle \phi_o=\frac{C_o}{H_o(\pi)+(B^\top\lambda)_o},&
+B\phi=D(\pi)g,\ D(\pi)^\top\lambda=0.
+\end{array}
+\end{equation}
+There is generally no closed form for the multipliers or for the joint update of $\pi$.  Nevertheless the conditional flux M-step has the same computational architecture as generalized Sinkhorn: sparse dual potentials enforce overlapping transportation-like marginal constraints, each dual update changes all incident orbit fluxes, and row-coordinate corrections solve a one-dimensional monotone equation.  Classical entropic scaling is exponential because its objective has forward-KL geometry; the CTMC complete-data Poisson likelihood yields the rational map \eqref{eq:rational}.  This rational dual-potential formulation is the natural EM analogue of generalized Sinkhorn for reversible lumpable fluxes.
+
+\end{document}

@@ -1,0 +1,13 @@
+{
+  "corpus": "data/cherry_counts_trrosetta",
+  "results": {
+    "lumpable": {
+      "ll": -611588251.6729217,
+      "per_count_ll": -2.23914959123503,
+      "val_per_count_ll": -2.241367594199912,
+      "n_params": 32870,
+      "time_s": 2018.3566789627075,
+      "monotone": true
+    }
+  }
+}

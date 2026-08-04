@@ -1,0 +1,410 @@
+% =====================================================================
+% draft-product-trees-elbo.tex
+%
+% DRAFT (not part of the live published spec). A standalone derivation of
+% the "product-of-trees" structured mean-field ELBO for the dynamic-latent-
+% field (dynfield) coevolution cluster likelihood. This bound is valid for
+% clusters of ANY size m and is LINEAR in m (never A^m), which is its whole
+% reason for existing: the exact L*A^m field-augmented peel is intractable
+% for m>2 at realistic A=20.
+%
+% This file deliberately does NOT \input into supplement.tex /
+% appendix-tkfdp.tex (the live spec). It is a self-contained working
+% derivation for the product-of-trees paper result. Compile standalone:
+%     pdflatex draft-product-trees-elbo.tex
+% =====================================================================
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage[margin=1in]{geometry}
+\usepackage{bm}
+\usepackage{hyperref}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\newtheorem{remark}{Remark}
+
+\newcommand{\btheta}{\bm{\theta}}
+\newcommand{\bDelta}{\bm{\Delta}}
+\newcommand{\bx}{\bm{x}}
+\newcommand{\Ex}[1]{\mathbb{E}\!\left[#1\right]}
+\newcommand{\Eq}[2]{\mathbb{E}_{#1}\!\left[#2\right]}
+\newcommand{\KL}[2]{\mathrm{KL}\!\left(#1\,\|\,#2\right)}
+\newcommand{\Ent}[1]{\mathcal{H}\!\left[#1\right]}
+\newcommand{\pa}{\mathrm{pa}}
+\newcommand{\Psub}{P_{\mathrm{sub}}}
+\newcommand{\Real}{\mathbb{R}}
+
+\title{The Product-of-Trees Structured Mean-Field ELBO\\for the Dynamic-Latent-Field Coevolution Model}
+\author{tkf-dp working note}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We derive a structured mean-field variational lower bound on the marginal
+likelihood of a dynfield coevolution cluster of arbitrary size $m$. The
+variational family is a \emph{product of independent tree-structured
+factors}: one tree-Markov law over the field-and-jumps configuration, and,
+for each of the $m$ sites, a tree-Markov law over that site's residue
+trajectory with full along-tree correlation. Unlike the exact
+field-augmented peel, whose per-node state space is $L\cdot A^{m}$, this
+bound costs $O\!\big(m\,N\,A^{2}+N\,L^{2}\big)$ --- \emph{linear} in $m$.
+We give the two block-coordinate-ascent updates in closed form (the residue
+update uses a \emph{geometric-mean} branch operator, the field update folds
+expected residue evidence into the field MRF potentials), prove the bound is
+monotone under coordinate ascent, identify the regimes in which it is tight
+or exact, and characterise the single approximation it makes: it severs the
+posterior coupling between the field and the residues.
+\end{abstract}
+
+\section{Model and notation}
+
+Fix a rooted tree with node set $\mathcal V$, root $r$, and for each
+non-root node $v$ a parent $u=\pa(v)$ and branch length $\tau_v$. Let
+$L=L_{\mathrm{field}}$ be the number of field states and $A$ the residue
+alphabet size. A cluster of $m$ sites carries, at every node $v$,
+\begin{itemize}
+\item a \emph{field} state $\theta_v\in\{0,\dots,L-1\}$;
+\item for each non-root $v$, a \emph{jump indicator} $\Delta_v\in\{0,1\}$ on
+      the edge $u\to v$;
+\item residue states $x_{n,v}\in\{0,\dots,A-1\}$, one per site $n=1,\dots,m$.
+\end{itemize}
+Write $\btheta=(\theta_v)_v$, $\bDelta=(\Delta_v)_{v\neq r}$, and
+$\bx_n=(x_{n,v})_v$ for the whole residue trajectory of site $n$. Site $n$
+has class $c_n$; the class maps a field state to an archetype
+$a_n(\theta)$, whose residue stationary is $\pi(c_n,\theta,\cdot)$ and whose
+GTR generator is $Q(c_n,\theta)$ with exchangeability $S$. Let
+$\Psub^{c_n,\theta}(\tau)=\exp\!\big(Q(c_n,\theta)\tau\big)$.
+
+The field is an F81-on-DP CTMC with rate $\rho_{\mathrm{chain}}$ and
+stationary $\rho$. Per branch of length $\tau$ define, exactly as in the code
+(\texttt{mm\_clv.field\_transition\_row}, \texttt{beta\_no\_jump}),
+\begin{equation}
+\begin{aligned}
+P^{\Theta}_\tau(\theta_u,\theta_v)
+  &= e^{-\rho_{\mathrm{chain}}\tau}\,[\theta_u{=}\theta_v]
+   + (1-e^{-\rho_{\mathrm{chain}}\tau})\,\rho(\theta_v),\\
+\beta_\tau(\theta) &= e^{-\rho_{\mathrm{chain}}(1-\rho(\theta))\tau},\qquad
+W_\tau(\theta_u,\theta_v) = P^{\Theta}_\tau(\theta_u,\theta_v)
+   - \beta_\tau(\theta_u)\,[\theta_u{=}\theta_v].
+\end{aligned}
+\label{eq:field-kernels}
+\end{equation}
+
+\paragraph{Jump-augmented joint.}
+We take as the target the $\Delta$-augmented joint
+\begin{equation}
+P(\btheta,\bDelta,\bx)
+  = \underbrace{\rho(\theta_r)\prod_{n}\pi(c_n,\theta_r,x_{n,r})}_{\text{root prior}}
+    \;\prod_{v\neq r}\psi_v(\theta_u,\Delta_v,\theta_v,\bx_{\cdot,u},\bx_{\cdot,v}),
+\label{eq:joint}
+\end{equation}
+with the branch factor
+\begin{equation}
+\psi_v =
+\begin{cases}
+\beta_{\tau_v}(\theta_u)\,[\theta_v{=}\theta_u]\;
+   \prod_{n}\Psub^{c_n,\theta_u}(\tau_v)(x_{n,u},x_{n,v}), & \Delta_v=0\ \text{(no jump)},\\[4pt]
+W_{\tau_v}(\theta_u,\theta_v)\;\prod_{n}\pi(c_n,\theta_v,x_{n,v}), & \Delta_v=1\ \text{(jump / renewal)}.
+\end{cases}
+\label{eq:psi}
+\end{equation}
+Summing \eqref{eq:psi} over $\Delta_v$ recovers the un-augmented branch factor
+$K_v$ used by the exact peel
+(\texttt{elbo\_rescorr.branch\_factor},
+\texttt{exact\_cap2.branch\_pair}); hence
+$\sum_{\bDelta}P(\btheta,\bDelta,\bx)=P(\btheta,\bx)$, and marginalising the
+internal residues and all fields gives exactly the model likelihood
+$P(\mathrm{obs})$ that the exact peel computes. Leaves clamp $x_{n,v}$ to the
+observation (or leave it free at a gap).
+
+\section{The product-of-trees variational family}
+
+\begin{equation}
+q(\btheta,\bDelta,\bx)
+  = q_\Theta(\btheta,\bDelta)\;\prod_{n=1}^{m} q_n(\bx_n),
+\label{eq:family}
+\end{equation}
+where
+\begin{itemize}
+\item $q_\Theta$ is an arbitrary \emph{tree-Markov} law over the
+      field-and-jumps configuration --- exactly the tree MRF that
+      \texttt{field\_bp.field\_logbp} handles, with a root node potential
+      over $\theta_r$ and per-edge potentials over
+      $(\theta_u,\theta_v,\Delta_v)$;
+\item each $q_n$ is an arbitrary \emph{tree-Markov} law over site $n$'s
+      residue trajectory (an $A$-state tree chain with full parent--child
+      correlation), with leaves clamped to their observations.
+\end{itemize}
+The $m+1$ factors are \emph{independent}: residues are \emph{not} conditioned
+on the field. This is the sole structural difference from the previous
+per-site bound (\texttt{elbo\_persite}), whose family
+$q_\Theta\prod_n q_n(\bx_n\mid\btheta,\bDelta)$ ties each residue chain to the
+field and thereby pays $O(mLA^2)$ but keeps the field--residue seam. Dropping
+that conditioning is what buys the clean product form below; Section
+\ref{sec:tightness} quantifies what it costs.
+
+Because $q$ factorises as in \eqref{eq:family}, its entropy is additive,
+\begin{equation}
+\Ent{q} = \Ent{q_\Theta}+\sum_{n=1}^m\Ent{q_n}.
+\label{eq:entropy-split}
+\end{equation}
+
+\section{The ELBO}
+
+For any $q$, Jensen gives the evidence lower bound
+\begin{equation}
+\log P(\mathrm{obs}) \;\ge\; \mathcal L(q)
+   := \Eq{q}{\log P(\btheta,\bDelta,\bx)} + \Ent{q}
+   \;=\; \log P(\mathrm{obs}) - \KL{q}{P(\cdot\mid\mathrm{obs})},
+\label{eq:elbo-def}
+\end{equation}
+with equality iff $q$ is the exact posterior. Since $q$ in \eqref{eq:family}
+is a proper normalised distribution and \eqref{eq:joint} normalises to
+$P(\mathrm{obs})$, $\mathcal L(q)\le\log P(\mathrm{obs})$ \emph{always}: the
+product-of-trees functional is a genuine lower bound. We now make every term
+explicit in tree marginals.
+
+Let $b_v(\theta)=q_\Theta(\theta_v{=}\theta)$ and
+$e_v(\theta_u,\theta_v,\Delta)=q_\Theta(\theta_u,\theta_v,\Delta_v{=}\Delta)$
+be the field node/edge marginals (returned by \texttt{field\_logbp}), and let
+$\mu_{n,v}(x)=q_n(x_{n,v}{=}x)$, $\xi_{n,v}(x_u,x_v)=q_n(x_{n,u}{=}x_u,x_{n,v}{=}x_v)$
+be the residue node/edge marginals. Using the factorisation
+$q_\Theta\!\perp\! q_n$ and $q_n\!\perp\! q_{n'}$,
+\begin{align}
+\Eq{q}{\log P}
+  =\;& \sum_\theta b_r(\theta)\Big[\log\rho(\theta)
+        + \sum_n\sum_x \mu_{n,r}(x)\log\pi(c_n,\theta,x)\Big]
+        \label{eq:ElogP-root}\\
+  &+\sum_{v\neq r}\Bigg\{
+     \sum_\theta e_v(\theta,\theta,0)\Big[\log\beta_{\tau_v}(\theta)
+        + \sum_n\sum_{x_u,x_v}\xi_{n,v}(x_u,x_v)\log\Psub^{c_n,\theta}(\tau_v)(x_u,x_v)\Big]
+        \nonumber\\
+  &\hphantom{+\sum_{v\neq r}\Bigg\{}
+   + \sum_{\theta_u,\theta_v} e_v(\theta_u,\theta_v,1)\Big[\log W_{\tau_v}(\theta_u,\theta_v)
+        + \sum_n\sum_{x}\mu_{n,v}(x)\log\pi(c_n,\theta_v,x)\Big]\Bigg\}.
+        \label{eq:ElogP-edge}
+\end{align}
+The $\Delta{=}0$ term survives only on the diagonal $\theta_u{=}\theta_v{=}\theta$
+because $\psi_v$ forces $\theta_v{=}\theta_u$ when there is no jump.
+
+Each residue entropy is the rooted tree-chain (junction-tree) entropy
+\begin{equation}
+\Ent{q_n} = \Ent{\mu_{n,r}} + \sum_{v\neq r}
+  \Big(-\!\!\sum_{x_u,x_v}\!\xi_{n,v}(x_u,x_v)
+        \big[\log\xi_{n,v}(x_u,x_v)-\log\mu_{n,u}(x_u)\big]\Big),
+\label{eq:Hqn}
+\end{equation}
+which is exact for any tree-Markov $q_n$; at a leaf $v$ the residue is clamped,
+so $\mu_{n,v}$ is a point mass and that edge contributes $0$.
+$\Ent{q_\Theta}$ is delivered by \texttt{field\_logbp} through the identity in
+Proposition~\ref{prop:field-elbo}.
+
+\section{Block-coordinate-ascent updates}
+
+We maximise $\mathcal L$ by alternating exact block updates.
+
+\subsection{Residue update (fix $q_\Theta$, optimise each $q_n$)}
+\label{sec:res-update}
+
+Collect the $\bx_n$-dependent part of $\mathcal L$. From
+\eqref{eq:ElogP-root}--\eqref{eq:ElogP-edge}, $\mathcal L$ is, up to a
+$q_n$-independent constant,
+\begin{equation}
+\mathcal L = \Eq{q_n}{\;\log\phi_{n,r}(x_{n,r})
+   + \sum_{v\neq r}\big[\,\log\Psi_{n,v}(x_{n,u},x_{n,v}) + \log\phi_{n,v}(x_{n,v})\,\big]}
+   + \Ent{q_n} + \mathrm{const},
+\label{eq:res-objective}
+\end{equation}
+with the tree pairwise-MRF log-potentials
+\begin{align}
+\log\phi_{n,r}(x) &= \sum_\theta b_r(\theta)\,\log\pi(c_n,\theta,x)
+   &&\text{(root node potential)},\label{eq:phi-root}\\
+\log\phi_{n,v}(x) &= \sum_{\theta_v} w^{1}_{v}(\theta_v)\,\log\pi(c_n,\theta_v,x),\quad
+   w^{1}_v(\theta_v):=\!\sum_{\theta_u}\! e_v(\theta_u,\theta_v,1)
+   &&\text{(node potential from renewal)},\label{eq:phi-node}\\
+\log\Psi_{n,v}(x_u,x_v) &= \sum_\theta w^{0}_v(\theta)\,
+   \log\Psub^{c_n,\theta}(\tau_v)(x_u,x_v),\quad
+   w^{0}_v(\theta):=e_v(\theta,\theta,0)
+   &&\text{(edge potential).}\label{eq:psi-edge}
+\end{align}
+\eqref{eq:res-objective} is $-\KL{q_n}{q_n^\star}+\mathrm{const}$ where
+$q_n^\star\propto\phi_{n,r}\prod_v\Psi_{n,v}\phi_{n,v}$ is itself
+tree-Markov; hence the \emph{exact} block maximiser is $q_n=q_n^\star$,
+attained \emph{within} the family. Its marginals $\mu_{n,\cdot},\xi_{n,\cdot}$
+and its entropy are obtained by one sum--product (forward--backward) sweep on
+the site-$n$ tree, with leaves clamped to observations.
+
+\begin{remark}[Geometric-mean branch operator]
+The edge factor is
+$\Psi_{n,v}(x_u,x_v)=\exp\!\big(\sum_\theta w^0_v(\theta)\log\Psub^{c_n,\theta}(\tau_v)(x_u,x_v)\big)
+ = \prod_\theta\big[\Psub^{c_n,\theta}(\tau_v)\big]^{\,w^0_v(\theta)}(x_u,x_v)$,
+a \emph{weighted geometric mean} (exp of the $q_\Theta$-weighted expected log)
+of the per-field substitution operators --- \emph{not} the arithmetic mean.
+This is the standard variational-message-passing form: the residue chain sees
+each field state's transition matrix weighted \emph{multiplicatively} by the
+joint no-jump probability $w^0_v(\theta)=q_\Theta(\theta_u{=}\theta_v{=}\theta,\Delta_v{=}0)$.
+Using the arithmetic mean here would not be the coordinate maximiser and would
+break the bound's monotonicity.
+\end{remark}
+
+\subsection{Field update (fix all $q_n$, optimise $q_\Theta$)}
+\label{sec:field-update}
+
+Collect the $(\btheta,\bDelta)$-dependent part of $\mathcal L$. It is the
+energy of a field-and-jumps tree MRF with the potentials that
+\emph{absorb the expected residue evidence}:
+\begin{align}
+\log\Phi_r(\theta) &= \log\rho(\theta) + \sum_n\sum_x\mu_{n,r}(x)\log\pi(c_n,\theta,x),
+   \label{eq:field-root}\\
+\log\Phi_v(\theta_u,\theta_v,0) &=
+  \begin{cases}
+   \log\beta_{\tau_v}(\theta) + \sum_n\sum_{x_u,x_v}\xi_{n,v}(x_u,x_v)\log\Psub^{c_n,\theta}(\tau_v)(x_u,x_v),
+     & \theta_u{=}\theta_v{=}\theta,\\
+   -\infty, & \text{otherwise},
+  \end{cases}\label{eq:field-edge0}\\
+\log\Phi_v(\theta_u,\theta_v,1) &=
+   \log W_{\tau_v}(\theta_u,\theta_v) + \sum_n\sum_x\mu_{n,v}(x)\log\pi(c_n,\theta_v,x).
+   \label{eq:field-edge1}
+\end{align}
+Running \texttt{field\_logbp} on these potentials returns the Gibbs law
+$q_\Theta^\star\propto\exp(\text{energy})$, its marginals $b,e$, and
+$\log Z_{\mathrm{field}}$. As in Section~\ref{sec:res-update}, $q_\Theta^\star$
+is the exact block maximiser.
+
+\begin{proposition}[Field partition function realises the field-side ELBO]
+\label{prop:field-elbo}
+With the potentials \eqref{eq:field-root}--\eqref{eq:field-edge1}, the
+belief-propagation partition function satisfies
+\begin{equation}
+\log Z_{\mathrm{field}} = \Eq{q}{\log P} + \Ent{q_\Theta}
+\qquad\text{evaluated at } q=(q_\Theta^\star,\{q_n\}),
+\label{eq:logZ-identity}
+\end{equation}
+where the $q_n$ are the (fixed) residue factors used to build the potentials.
+Consequently
+\begin{equation}
+\boxed{\;\mathcal L(q_\Theta^\star,\{q_n\}) \;=\; \log Z_{\mathrm{field}}
+   \;+\; \sum_{n=1}^m \Ent{q_n}.\;}
+\label{eq:elbo-eval}
+\end{equation}
+\end{proposition}
+\begin{proof}
+Write $E(\btheta,\bDelta)$ for the total energy, i.e.\ the sum of
+\eqref{eq:field-root}--\eqref{eq:field-edge1} over the root and all edges. By
+construction $E(\btheta,\bDelta)=\Eq{\prod_n q_n}{\log P(\btheta,\bDelta,\bx)}$
+--- the potentials are exactly the residue-averaged log-joint as a function of
+the field configuration. For a tree MRF, the Gibbs law
+$q_\Theta^\star=e^{E}/Z_{\mathrm{field}}$ obeys
+$\Ent{q_\Theta^\star}=-\Eq{q_\Theta^\star}{E}+\log Z_{\mathrm{field}}$, i.e.\
+$\log Z_{\mathrm{field}}=\Eq{q_\Theta^\star}{E}+\Ent{q_\Theta^\star}$. Taking
+$\Eq{q_\Theta^\star}{E}=\Eq{q_\Theta^\star}{\Eq{\prod_n q_n}{\log P}}
+=\Eq{q}{\log P}$ gives \eqref{eq:logZ-identity}; adding
+$\sum_n\Ent{q_n}$ and using \eqref{eq:entropy-split},\eqref{eq:elbo-def} gives
+\eqref{eq:elbo-eval}. \texttt{field\_logbp} returns exactly the tree-MRF
+$Z_{\mathrm{field}}$ and marginals, so the identity holds numerically.
+\end{proof}
+
+\subsection{Monotonicity and cost}
+
+\begin{proposition}[Monotone coordinate ascent]
+Let $q_\Theta^{t}=\arg\max_{q_\Theta}\mathcal L(q_\Theta,\{q_n^{t-1}\})$
+(field update) and $q_n^{t}=\arg\max_{q_n}\mathcal L(q_\Theta^{t},\cdot)$
+(residue update). Define the reported value
+$R_t := \mathcal L(q_\Theta^{t},\{q_n^{t-1}\}) = \log Z_{\mathrm{field}}^{t}
+ + \sum_n\Ent{q_n^{t-1}}$ (Prop.~\ref{prop:field-elbo}). Then
+$R_t\le R_{t+1}\le\log P(\mathrm{obs})$ for all $t$.
+\end{proposition}
+\begin{proof}
+Each block update is an exact maximiser, so
+$\mathcal L(q_\Theta^{t},\{q_n^{t-1}\})\le\mathcal L(q_\Theta^{t},\{q_n^{t}\})
+\le\mathcal L(q_\Theta^{t+1},\{q_n^{t}\})=R_{t+1}$, and $R_t\le\log P$ by
+\eqref{eq:elbo-def}.
+\end{proof}
+Precomputing the fixed kernels ($\beta,W,\Psub$) once, each sweep costs
+$O(N L^2)$ for the field BP plus $O(m N A^2)$ for the $m$ residue BPs and the
+potential assembly: \textbf{linear in $m$}, never $A^m$. Contrast the exact
+peel at $O(N L A^{2m})$.
+
+\paragraph{Warm start.}
+Initialise $q_\Theta$ to the field prior (potentials
+\eqref{eq:field-root}--\eqref{eq:field-edge1} with the residue-evidence terms
+removed) and run one residue update; this yields independent, field-prior-
+averaged LG residue posteriors, from which coordinate ascent proceeds.
+
+\section{Tightness and exactness}
+\label{sec:tightness}
+
+By \eqref{eq:elbo-def}, the gap is
+$\log P(\mathrm{obs})-\mathcal L(q)=\KL{q}{P(\cdot\mid\mathrm{obs})}\ge0$, so
+$\mathcal L$ is exact iff the true posterior lies in the family
+\eqref{eq:family}: it must factor as [tree-Markov in $(\btheta,\bDelta)$]
+$\times\prod_n$[tree-Markov in $\bx_n$], with the field independent of the
+residues \emph{a posteriori}. The one approximation the family makes is
+precisely to sever this field--residue seam.
+
+\begin{proposition}[Exactness: field-independent emissions AND no jumps]
+\label{prop:exact}
+The product-of-trees bound is exact, $\mathcal L^\star=\log P(\mathrm{obs})$,
+for any tree and any $m$ whenever both hold:
+\begin{itemize}
+\item[(a)] emissions are field-independent: $\pi(c_n,\theta,\cdot)$ and
+      $Q(c_n,\theta)$ do not depend on $\theta$; and
+\item[(b)] there are no jumps: $\beta_\tau\equiv1$, $W_\tau\equiv0$ --- i.e.\
+      $\rho_{\mathrm{chain}}=0$, or the degenerate $L=1$ (single field state,
+      $\rho$ a point mass), which forces (a) and (b) simultaneously.
+\end{itemize}
+\end{proposition}
+\begin{proof}
+Under (b) every edge has $\Delta_v=0$ and $\theta_v=\theta_r$ for all $v$: the
+field is frozen at the root state. Under (a) the surviving branch factor
+$\prod_n\Psub^{c_n}(\tau_v)(x_{n,u},x_{n,v})$ is field-free, so
+\eqref{eq:joint} becomes
+$\rho(\theta_r)\times\prod_n\big[\pi(c_n,x_{n,r})\prod_v\Psub^{c_n}(x_{n,u},x_{n,v})\big]$,
+a product of a field prior and $m$ independent residue tree chains. Its
+posterior has $\theta_r$ independent of the residues and each site an
+independent $A$-state tree chain --- exactly the family \eqref{eq:family}, so
+$\KL{q}{P(\cdot\mid\mathrm{obs})}=0$ at the block maximisers. Dropping (a) but
+keeping (b) makes the frozen field a \emph{mixture}
+$\sum_\theta\rho(\theta)\prod_n P(\bx_n\mid\theta)$ whose posterior correlates
+$\theta_r$ with the residues, so (a) is genuinely required.
+\end{proof}
+
+\begin{remark}[The jump reset couples residues to $\bDelta$; $m=1$ is not exact]
+Field-independent emissions alone (without (b)) do \emph{not} suffice: a jump
+$\Delta_v=1$ \emph{resets} the residue by drawing it afresh from $\pi(c_n,\cdot)$
+(a renewal), so the residue trajectory's per-edge transition depends on the
+jump indicator $\Delta_v$ --- and hence on $q_\Theta$ --- even when the
+emission distribution does not depend on the field \emph{value}. The
+along-site coupling to $\bDelta$ is the seam the family severs. Consequently
+the bound is inexact whenever there is jump uncertainty coupled to residue
+data, \emph{including for a single site} $m=1$ at $\rho_{\mathrm{chain}}>0$.
+This is the sharp contrast with the field-conditioned bounds
+\texttt{elbo\_persite}/\texttt{elbo\_treestruct}, exact for $m=1$ (any depth)
+and cherries (any $m$) because they retain the seam. In particular
+$\rho_{\mathrm{chain}}=0$ with field-\emph{dependent} emissions is a strict
+(loose) bound --- the frozen-field mixture above --- whereas the seam-keeping
+bounds are exact there. Empirically the residual gap scales $\propto
+\rho_{\mathrm{chain}}$ as $\rho_{\mathrm{chain}}\to0$ under (a).
+The evaluation (\texttt{analysis/product\_of\_trees\_elbo\_eval.md}) reports
+exactly how loose the bound is on real 128-leaf trees, and whether coordinate
+ascent recovers enough of the gap to make it usable as a scorer.
+\end{remark}
+
+\begin{remark}[Relation to the previous bounds]
+The three bounds form a ladder of families over the same joint:
+node-mean-field (\texttt{elbo}) $\subset$ product-of-trees (this note)
+partially-overlapping-with field-conditioned per-site
+(\texttt{elbo\_persite}) $\subset$ full residue-correlated
+(\texttt{elbo\_treestruct}). Product-of-trees restores the \emph{along-tree}
+residue correlation that the node-mean-field floor crushes (every $q_n$ is a
+full tree chain, not per-node marginals), while spending only $O(A^2)$ per
+site; it drops the \emph{field--residue} correlation that
+\texttt{elbo\_persite} keeps. Which of product-of-trees and
+\texttt{elbo\_persite} is tighter is therefore case-dependent and is settled
+empirically.
+\end{remark}
+
+\end{document}

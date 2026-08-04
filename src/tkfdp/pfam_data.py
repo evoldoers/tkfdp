@@ -34,6 +34,12 @@ class FamilyCherries:
     tau: np.ndarray                     # (C,) float, branch distances
     aa_a: np.ndarray                    # (C, L) int8
     aa_b: np.ndarray                    # (C, L) int8
+    # Optional soft PSWM tensors (C, L, A=20) for the PSWM training path.
+    # When present, aa_a/aa_b are one MC sample drawn from them at load
+    # time; downstream code can consume the PSWM directly via the soft
+    # emission path.
+    pswm_a: np.ndarray | None = None
+    pswm_b: np.ndarray | None = None
 
     def both_aa_mask(self) -> np.ndarray:
         """Boolean mask (C, L): True where both ends are non-gap amino acids."""
@@ -180,4 +186,121 @@ def families_from_list(family_ids: list[str],
         masks.append(keep_mask)
     if return_keep_masks:
         return out, masks
+    return out
+
+
+# ---------------------------------------------------------------------------
+# CLV corpus loading (per-family LG08 Felsenstein CLV; see par:arch-lg08-is).
+# Retires the marginal-PSWM loader that was here — that scheme discarded
+# branch-length correlations by sampling parent and child endpoints
+# independently from their marginals; see docs and the commit history
+# for the diagnosis. The new loader stores the bottom-up CLV and does
+# top-down conditional sampling of whole-tree histories.
+# ---------------------------------------------------------------------------
+
+@dataclass
+class FamilyCLV:
+    """Per-family CLV bundle produced by `experiments/preprocess_pfam_pswm.py`.
+
+    `sample_history(rng)` draws a whole-tree residue assignment
+    (n_nodes, L) from the LG08 joint tree posterior; converting that to
+    per-branch (aa_a, aa_b, tau) records for training goes through
+    `extract_branch_cherries`.
+    """
+    family: str
+    L: int
+    n_nodes: int
+    n_leaves: int
+    root_id: int
+    parent: np.ndarray                         # (n_nodes,) int32
+    tau: np.ndarray                             # (n_nodes,) float64
+    clv: np.ndarray                             # (n_nodes, L, A) float32
+    log_scale: np.ndarray                       # (n_nodes, L) float32
+    log_p_lg_per_site: np.ndarray               # (L,) float64
+    leaf_msa: np.ndarray                        # (n_leaves, L) int8
+
+    def sample_history(self, rng: np.random.Generator) -> np.ndarray:
+        """Top-down conditional sample of internal residues under LG08
+        (par:arch-lg08-is eq. 2--3). Returns (n_nodes, L) int8."""
+        from .pswm_peeling import sample_joint_tree_history
+        return sample_joint_tree_history(
+            self.clv, self.parent, self.tau, self.leaf_msa, rng)
+
+    def extract_branch_cherries(self, X: np.ndarray) -> FamilyCherries:
+        """Convert a sampled history X (n_nodes, L) to per-branch
+        (aa_a, aa_b, tau) records in the FamilyCherries format.
+        Branch order matches `enumerate_branches(self.parent)`."""
+        from .pswm_peeling import enumerate_branches
+        branches = enumerate_branches(self.parent)              # (n_branches, 2)
+        aa_a = np.ascontiguousarray(X[branches[:, 0]], dtype=np.int8)
+        aa_b = np.ascontiguousarray(X[branches[:, 1]], dtype=np.int8)
+        tau_per_branch = self.tau[branches[:, 1]].astype(np.float64)
+        return FamilyCherries(
+            family=self.family, L=self.L,
+            n_cherries=int(branches.shape[0]),
+            tau=tau_per_branch, aa_a=aa_a, aa_b=aa_b,
+        )
+
+
+def load_clv_family(path) -> FamilyCLV:
+    """Load a per-family CLV npz written by
+    `experiments/preprocess_pfam_pswm.py`."""
+    d = np.load(path, allow_pickle=False)
+    return FamilyCLV(
+        family=str(d['family']),
+        L=int(d['L']),
+        n_nodes=int(d['n_nodes']),
+        n_leaves=int(d['n_leaves']),
+        root_id=int(d['root_id']),
+        parent=np.asarray(d['parent']),
+        tau=np.asarray(d['tau']),
+        clv=np.asarray(d['clv']),
+        log_scale=np.asarray(d['log_scale']),
+        log_p_lg_per_site=np.asarray(d['log_p_lg_per_site']),
+        leaf_msa=np.asarray(d['leaf_msa']),
+    )
+
+
+def families_from_clv_dir(clv_dir,
+                              family_ids: 'list[str] | None' = None,
+                              min_columns: int = 30,
+                              max_columns: int = 200,
+                              min_leaves: int = 4,
+                              ) -> 'list[FamilyCLV]':
+    """Load a CLV corpus preprocessed by
+    `experiments/preprocess_pfam_pswm.py`.
+
+    Args:
+      clv_dir: directory containing per-family <fam>.npz.
+      family_ids: family IDs to load. Defaults to `families` in the
+        directory's index.json.
+      min_columns, max_columns, min_leaves: filter families by size.
+    """
+    from pathlib import Path
+    import json as _json
+    clv_dir = Path(clv_dir)
+    if family_ids is None:
+        idx_path = clv_dir / "index.json"
+        if idx_path.exists():
+            idx = _json.load(open(idx_path))
+            family_ids = list(idx['families'])
+        else:
+            # Fallback: glob the directory. Useful when the corpus is
+            # still being preprocessed and the manifest is not yet written.
+            family_ids = sorted(p.stem for p in clv_dir.glob("*.npz"))
+    out = []
+    for fam in family_ids:
+        p = clv_dir / f"{fam}.npz"
+        if not p.exists():
+            continue
+        try:
+            fc = load_clv_family(p)
+        except Exception as e:
+            print(f"  WARNING: {fam} CLV load failed: {e}")
+            continue
+        if fc.L < min_columns or fc.L > max_columns:
+            continue
+        if fc.n_leaves < min_leaves:
+            continue
+        out.append(fc)
     return out

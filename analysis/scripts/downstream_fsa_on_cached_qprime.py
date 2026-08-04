@@ -55,6 +55,9 @@ def main():
                         '(e.g. infinite_phmm_mcmc_K4_coupled_RE)')
     p.add_argument('--params-key', required=True,
                    help='Cache params_key (16-hex) for the cached Q\' arrays')
+    p.add_argument('--consistency-iters', type=int, default=0,
+                   help='If >0, apply the ProbCons consistency transform to the '
+                        'cached pairwise posteriors before FSA (no DP/FB rerun).')
     p.add_argument('--balibase-dir', type=str,
                    default=str(Path.home() / 'bio-datasets'
                                   / 'BAliBASE3' / 'bali3pdbm'))
@@ -118,6 +121,13 @@ def main():
                   "skipping", flush=True)
             continue
         pair_posteriors, kind, _failed = loaded
+
+        if args.consistency_iters > 0:
+            # ProbCons-style probabilistic-consistency relaxation on the cached
+            # pairwise posteriors BEFORE FSA reconstruction. No DP/MCMC/FB rerun.
+            from tkfmixdom.jax.tree.fsa_anneal import consistency_transform
+            pair_posteriors = consistency_transform(
+                pair_posteriors, n_iters=args.consistency_iters)
 
         fa_path = in_dir / fam
         ref_path = ref_dir / fam

@@ -109,6 +109,41 @@ def sequence_annealing(n_seqs, seq_lens, pair_post,
 from tkfmixdom.jax.core.protein import rate_matrix_lg                              # noqa: E402
 
 
+def _eval_balibase_preflight(args):
+    """Loudly warn (stderr, flushed) about CLI settings that silently
+    disable critical features or quietly mis-attribute results. Designed
+    to be visible to log-tailing / automation but unobtrusive for human
+    callers (one-liner per warn). Suppress with --no-preflight."""
+    if getattr(args, 'no_preflight', False):
+        return
+    warns = []
+    if getattr(args, 'pre_sinkhorn', False):
+        warns.append(
+            "--pre-sinkhorn ON: Infinite Pair HMM target is the LEGACY "
+            "(A3 non-reversible) joint; silently violates detailed balance "
+            "on partial-presence pairs. Only use to reproduce pre-A1 "
+            "released checkpoints' numerics.")
+    if getattr(args, 'allow_id_edges', False) and getattr(args, 'pre_sinkhorn', False):
+        warns.append(
+            "--allow-id-edges + --pre-sinkhorn: I/D-edge support requires "
+            "A1 mode (typed M-boost via build_M_tensor_typed). Combination "
+            "is incoherent; the I/D-edge code will silently fall back to "
+            "MM-only at edge proposal time.")
+    if not getattr(args, 'checkpoints', None):
+        warns.append(
+            "--checkpoints is empty: no model-side methods will be scored "
+            "(only baseline_fsa / muscle / mafft, depending on --methods). "
+            "Pass --checkpoints <tag>:<chkpt_dir> [...] if you intend to "
+            "score any tkfdp_* method.")
+    if not warns:
+        return
+    print("", file=sys.stderr, flush=True)
+    print("=== eval_balibase preflight warnings ===", file=sys.stderr, flush=True)
+    for w in warns:
+        print(f"  WARN: {w}", file=sys.stderr, flush=True)
+    print("(suppress with --no-preflight)\n", file=sys.stderr, flush=True)
+
+
 def default_balibase_root() -> Path:
     home = Path(os.environ.get("BIO_DATASETS_HOME",
                                   Path.home() / "bio-datasets")) / "data"
@@ -437,6 +472,8 @@ def run_tkfdp_mcmc(seqs: dict, state, alpha_z: float = 100.0,
                    mcmc_anneal_fraction: float = 0.0,
                    mcmc_alpha_z_ladder: str = "",
                    mcmc_swap_every: int = 10,
+                   mcmc_reversible: bool = True,
+                   mcmc_allow_id_edges: bool = False,
                    _bm_cache=None, _model_tag: str = "default",
                    **_) -> dict:
     """FSA + TKF-DP MCMC sampler from the infinite Pair HMM.
@@ -488,6 +525,8 @@ def run_tkfdp_mcmc(seqs: dict, state, alpha_z: float = 100.0,
             alpha_z_init=a0, alpha_z_final=af,
             anneal_fraction=mcmc_anneal_fraction,
             alpha_z_ladder=ladder, swap_every=mcmc_swap_every,
+            reversible=mcmc_reversible,
+            allow_id_edges=mcmc_allow_id_edges,
         )
         pair_post_corr[(i, j)] = jnp.asarray(Q_corr)
     col_assignments, msa_length = sequence_annealing(
@@ -718,8 +757,35 @@ def main():
                             "Example: 100,200,500,1000,5000,50000")
     ap.add_argument("--mcmc-swap-every", type=int, default=10,
                        help="Replica-exchange swap proposal frequency in sweeps.")
+    ap.add_argument("--pre-sinkhorn", action="store_true",
+                       help="Disable the A1 (Sinkhorn-corrected, reversible) "
+                            "model and revert to the legacy pre-2026-06-27 "
+                            "scoring. Use only to reproduce released "
+                            "pre-A1 K_c=8 K_H=1 checkpoints; the resulting "
+                            "MCMC target is non-reversible and silently "
+                            "violates detailed balance on partial-presence "
+                            "pairs. New runs should leave this off.")
+    ap.add_argument("--allow-id-edges", action="store_true",
+                       help="Allow the Infinite Pair HMM sampler to propose "
+                            "edges between Insertion / Deletion cells in "
+                            "addition to Match-Match. Requires reversible "
+                            "(A1) mode. May cause high segment-resample "
+                            "rejection rate when I/D anchors are dense; the "
+                            "Infinite Pair HMM is primarily a fast trainer, "
+                            "and evolmoves is the production sampler for "
+                            "I/D-rich workloads. Off by default.")
+    ap.add_argument("--no-preflight", action="store_true",
+                       help="Suppress preflight WARN banner.")
     args = ap.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Preflight: loud-but-concise warnings to stderr for settings that
+    # silently disable critical features. Suppress with --no-preflight.
+    _eval_balibase_preflight(args)
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except Exception:
+        pass
 
     in_dir = args.bali_root / args.bench / "in"
     ref_dir = args.bali_root / args.bench / "ref"
@@ -829,7 +895,9 @@ def main():
                                             mcmc_alpha_z_final=args.mcmc_alpha_z_final,
                                             mcmc_anneal_fraction=args.mcmc_anneal_fraction,
                                             mcmc_alpha_z_ladder=args.mcmc_alpha_z_ladder,
-                                            mcmc_swap_every=args.mcmc_swap_every)
+                                            mcmc_swap_every=args.mcmc_swap_every,
+                                            mcmc_reversible=not args.pre_sinkhorn,
+                                            mcmc_allow_id_edges=args.allow_id_edges)
             sp = sp_score(pred, last_ref_for_score)
             tc = tc_score(pred, last_ref_for_score)
             err = ""

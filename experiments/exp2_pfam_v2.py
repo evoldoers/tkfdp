@@ -52,6 +52,48 @@ from tkfdp.svi import (SVIState, accumulate_real_counts,
 from tkfdp.potts_dp import escobar_west_alpha_H_update
 
 
+def _preflight_warn(args):
+    """Loudly warn (stderr, flushed) about argparse settings that silently
+    disable critical features. Designed to be visible to log-tailing /
+    automation but unobtrusive for humans (one-liner per warning, no
+    paragraphs). Opt out with --no-preflight.
+
+    Common-mistake list — extend as we discover more:
+      - --val-families empty: no val cycles, no early stop.
+      - --pre-sinkhorn ON: legacy A3 model semantics, not A1.
+      - --resume-from set to a dir without _chkpt/state.npz: silent
+        no-op start-from-scratch.
+    """
+    if getattr(args, 'no_preflight', False):
+        return
+    warns = []
+    if not args.val_families:
+        warns.append(
+            "--val-families is empty: no val cycles will run, "
+            "best_val_LL stays at -inf, early stopping CANNOT fire. "
+            "Run will go to --n-outer or wall-time. Pass "
+            "--val-families <comma-sep IDs> to enable.")
+    if getattr(args, 'pre_sinkhorn', False):
+        warns.append(
+            "--pre-sinkhorn ON: training the LEGACY (A3 free-h, "
+            "non-reversible) joint pair stationary. Only use for "
+            "reproducing pre-2026-06-27 released checkpoints.")
+    if args.resume_from is not None:
+        chk = args.resume_from / 'state.npz'
+        if not chk.exists():
+            warns.append(
+                f"--resume-from points at {args.resume_from} but "
+                f"{chk} does NOT exist; the script will start from "
+                f"scratch and silently overwrite --out-dir.")
+    if not warns:
+        return
+    print("", file=sys.stderr, flush=True)
+    print("=== exp2_pfam_v2 preflight warnings ===", file=sys.stderr, flush=True)
+    for w in warns:
+        print(f"  WARN: {w}", file=sys.stderr, flush=True)
+    print("(suppress with --no-preflight)\n", file=sys.stderr, flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--families", type=str, default="",
@@ -143,6 +185,23 @@ def main():
                          "loads the first --n-families families from the index "
                          "instead of parsing Stockholm files. Faster and "
                          "supports much larger corpora.")
+    ap.add_argument("--pswm-corpus-dir", type=Path, default=None,
+                    help="Path to a PSWM-preprocessed corpus (from "
+                         "experiments/preprocess_pfam_pswm.py). Each family's "
+                         "npz stores per-branch PSWM pairs from LG08 Felsenstein "
+                         "peeling; branches replace cherries as training "
+                         "records. Hard MC samples are drawn from each PSWM at "
+                         "load time to feed the hard-observation loop; the "
+                         "full PSWMs remain available on FamilyCherries for "
+                         "downstream soft-emission dispatch.")
+    ap.add_argument("--pswm-sample-hard", action="store_true", default=True,
+                    help="With --pswm-corpus-dir: draw one hard residue per "
+                         "PSWM position (categorical sample). Default on. "
+                         "Use --no-pswm-sample-hard for argmax fallback.")
+    ap.add_argument("--no-pswm-sample-hard", dest="pswm_sample_hard",
+                    action="store_false",
+                    help="With --pswm-corpus-dir: use argmax instead of a "
+                         "categorical sample per PSWM position.")
     ap.add_argument("--n-families", type=int, default=None,
                     help="When --processed-dir is set, take this many families "
                          "from the front of the index (which is sorted by "
@@ -179,14 +238,40 @@ def main():
                          "Each val cycle is --val-every outer iters apart, so "
                          "patience=6 with val-every=5 means 30 outers of "
                          "no improvement triggers stop.")
+    ap.add_argument("--pre-sinkhorn", action="store_true",
+                    help="Disable A1 reversibility (use the legacy free-h / "
+                         "A3 joint pair stationary at every training site). "
+                         "Off by default (training produces A1 checkpoints); "
+                         "use this only to reproduce released pre-A1 "
+                         "training runs against the same numerics.")
+    ap.add_argument("--no-preflight", action="store_true",
+                    help="Suppress the preflight WARN banner that flags "
+                         "settings which silently disable critical features "
+                         "(e.g. empty --val-families => no early stopping). "
+                         "Use sparingly; defaults exist for a reason.")
     args = ap.parse_args()
-    if args.processed_dir is None and not args.families.strip():
-        ap.error("Either --processed-dir or --families must be supplied.")
+    if (args.processed_dir is None
+        and args.pswm_corpus_dir is None
+        and not args.families.strip()):
+        ap.error("Either --processed-dir, --pswm-corpus-dir, or --families "
+                 "must be supplied.")
+    if args.processed_dir is not None and args.pswm_corpus_dir is not None:
+        ap.error("--processed-dir and --pswm-corpus-dir are mutually exclusive.")
     if args.resume_from is not None and args.resume_globals_from is not None:
         ap.error("--resume-from and --resume-globals-from are mutually exclusive.")
     if args.anchor_families and args.restrict_anchor_families:
         ap.error("--anchor-families and --restrict-anchor-families are mutually exclusive.")
     args.out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Preflight: warn (loudly, to stderr) about config that disables
+    # critical features. One-liners only; opt out with --no-preflight.
+    _preflight_warn(args)
+    # Force line-buffered stdout so a `tail -f` of a redirected log shows
+    # progress in real time even if the caller forgot `python3 -u`.
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except Exception:
+        pass
 
     if args.processed_dir is not None:
         from tkfdp.pfam_data_fast import families_from_processed
@@ -197,6 +282,21 @@ def main():
         )
         print(f"  Loaded {len(families)} families "
                 f"({sum(fc.n_cherries for fc in families)} cherries, "
+                f"{sum(fc.L for fc in families)} columns)")
+    elif args.pswm_corpus_dir is not None:
+        from tkfdp.pfam_data import families_from_pswm_dir
+        print(f"Loading PSWM corpus from {args.pswm_corpus_dir} "
+                f"(hard-sample={args.pswm_sample_hard}) ...")
+        pswm_rng = np.random.default_rng(args.seed ^ 0xC0FFEE)
+        families = families_from_pswm_dir(
+            args.pswm_corpus_dir, family_ids=None,
+            rng=pswm_rng, sample_hard=args.pswm_sample_hard,
+            min_cherries=args.min_cherries,
+        )
+        if args.n_families is not None:
+            families = families[: args.n_families]
+        print(f"  Loaded {len(families)} PSWM-families "
+                f"({sum(fc.n_cherries for fc in families)} branch-pairs, "
                 f"{sum(fc.L for fc in families)} columns)")
     else:
         family_ids = [f.strip() for f in args.families.split(",") if f.strip()]
@@ -212,10 +312,16 @@ def main():
     per_family_data = []
     all_t = []
     for fc in families:
-        per_family_data.append(dict(
+        fd_entry = dict(
             family=fc.family, L=fc.L, n_cherries=fc.n_cherries, tau=fc.tau,
             aa_a=fc.aa_a, aa_b=fc.aa_b, both_aa=fc.both_aa_mask(),
-        ))
+        )
+        # If loaded from PSWM corpus, attach soft tensors so downstream
+        # emission calls can dispatch to the soft cluster path.
+        if fc.pswm_a is not None:
+            fd_entry['pswm_a'] = fc.pswm_a
+            fd_entry['pswm_b'] = fc.pswm_b
+        per_family_data.append(fd_entry)
         all_t.append(fc.tau)
     all_t = np.concatenate(all_t)
     # Quantize tau to 0.01 to bound the unique-t cache
@@ -246,6 +352,10 @@ def main():
                               init_pair_fraction=args.init_pair_fraction,
                               K_H_max=args.K_H_max,
                               rng=rng)
+    # A1 reversibility switch (2026-06-27). Default on; disable only
+    # to reproduce pre-A1 training of released non-reversible
+    # checkpoints (see --pre-sinkhorn below).
+    state.reversible = (not getattr(args, 'pre_sinkhorn', False))
 
     # Anchor support: load PDB contacts for the requested families and
     # override their initial partition with those pairs. The Gibbs sweep
@@ -427,8 +537,23 @@ def main():
         trace.setdefault("val_LL", [])
     t0_total = time.time()
     early_stop = False
+    # RNG for per-iter MC resampling of hard aa from PSWMs (soft HR is
+    # deferred; this samples fresh (X, Y) per outer so E[HR] over iters
+    # converges to the soft-observation posterior).
+    pswm_resample_rng = np.random.default_rng(args.seed ^ 0xBAD54FE)
+    def _resample_pswm_hard(per_family_data, rng):
+        from tkfdp.pfam_data import _sample_hard_from_pswm
+        for fd in per_family_data:
+            if 'pswm_a' in fd and 'pswm_b' in fd:
+                fd['aa_a'] = _sample_hard_from_pswm(fd['pswm_a'], rng)
+                fd['aa_b'] = _sample_hard_from_pswm(fd['pswm_b'], rng)
+                fd['both_aa'] = ((fd['aa_a'] < 20) & (fd['aa_b'] < 20))
     for it in range(it_start, args.n_outer):
         t0 = time.time()
+        # Re-sample hard aa_a/aa_b from PSWM at the start of each outer.
+        # Only affects families whose fd carries pswm_a/pswm_b. The soft
+        # cluster / EM warmup paths continue to see the full PSWM.
+        _resample_pswm_hard(per_family_data, pswm_resample_rng)
 
         # 1. Build log_P caches for partition Gibbs.
         # log_P_cache: (K_c, K_c, n_t, 400, 400) — already per-(c1, c2)
