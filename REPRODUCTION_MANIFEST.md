@@ -53,6 +53,7 @@ gh release download <tag> --repo ${RELEASE_OWNER}/<repo> -p '*.npz' -p '*.tar.gz
 ### `${RELEASE_OWNER}/tkf-mixdom`
 | Tag | Contents |
 |---|---|
+| `results/mixdom-d3f1-perdomain-2026-08-04` | **MixDom-d3f1** (per-domain substitution matrices), Pfam v3 — current headline substitution-side model |
 | `results/mixfrag-F2-pfam-2026-08-04` | **MixFrag F=2** cherry-EM fit (TKF92 + 2 fragtypes) |
 | `mixdom-checkpoints-2026-05` | **TKF92-K=20**, **CherryML-C=20** mixture checkpoints (+ the earlier MixDom-d3f1) |
 
@@ -63,10 +64,10 @@ gh release download <tag> --repo ${RELEASE_OWNER}/<repo> -p '*.npz' -p '*.tar.gz
 | `results/paper2-coupling-rates-2026-08-04` | Paper-2 coupled amino-acid substitution rates: Exchangeable, Metropolis, Coupled, Metropolis-mixture (+Γ+I) |
 | `results/K4-emwarm-top1000-2026-05-09` | TKF-DP K꜀=4 EM-warmup checkpoint (Pfam top-1000); backs the infinite-pair-HMM K=4 results |
 
-> The **per-domain MixDom-d3f1** checkpoint (`svibw_d3f1_perdomain_v3`) is the
-> current headline substitution-side model (each domain gets its own
-> substitution matrix; 540 svi-BW iterations on the v3 corpus). Package it into
-> a `tkf-mixdom` release before citing it as reproducible.
+> The **per-domain MixDom-d3f1** checkpoint (`svibw_d3f1_perdomain_v3`, released
+> as `results/mixdom-d3f1-perdomain-2026-08-04`) is the current headline
+> substitution-side model: each domain gets its own substitution matrix; 540
+> svi-BW iterations on the v3 corpus.
 
 ---
 
