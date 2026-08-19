@@ -93,7 +93,7 @@ open_pdf() {
 }
 
 # Parse args: first positional is the mode; --open is a modifier.
-MODE="--main"
+MODE="--supp"
 OPEN=0
 for arg in "$@"; do
     case "$arg" in
