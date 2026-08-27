@@ -686,7 +686,7 @@ integral over single-site bridge marginals: polynomial, not exponential, in clus
 \paragraph{Path ELBO.} Let a cluster of $L$ sites carry the Potts target
 $\Pi(x)\propto e^{-E(x)}$, $x\in\Xset^L$, with
 $E(x)=-\sum_s h_s(x_s)-\sum_{s<s'}H_{ss'}(x_s,x_{s'})$, and let the independent
-single-site GTR proposal $R_{ab}=S_{ab}\pi_b$ act site-wise. Suppose the coupling is carried
+single-site GTR proposal $R_{ic}=S_{ic}\pi_c$ act site-wise. Suppose the coupling is carried
 by the \emph{square-root}\footnote{
 Among acceptances $A(z)\propto z^\theta$, reversibility ($A(z)=zA(1/z)$) forces
 $\theta=\tfrac12$: the square root is the unique log-linear reversible acceptance, i.e.\
@@ -713,7 +713,7 @@ form~\eqref{eq:cdl}: a trajectory $\mathbb X$ with usages $U$ and dwell times $T
 with $q(x)=\sum_{y\ne x}Q_{xy}$ the exit rate. The ELBO adds the $R$-bridge average of this
 difference to the proposal's own log-transition probability,
 \begin{equation}\label{eq:pathelbo}
- \mathcal L_{ab}=\log[e^{tR}]_{ab}
+ \mathcal L_{ab}=\sum_s\log[e^{tR}]_{a_sb_s}
  +\sum_{x,s,c\ne x_s}\bar N^{ab}_{x,s:c}\log\frac{W_{x,x^{s:c}}}{R_{x_sc}}
  -\sum_x\bar T^{ab}_x\,[w(x)-r(x)],
 \end{equation}
@@ -731,7 +731,7 @@ where Cohn et al. optimise a time-varying \emph{inhomogeneous} rate via Euler-La
 bridges of the \emph{time-homogeneous} $R$. Fixing the rates, rather than
 solving their ODEs, makes ours the looser of the two bounds, but more stable to compute: the terms that diverge as $u\to t$
 (their rate integral divides by a backward probability vanishing at the endpoint)
-telescope analytically into the $\log[e^{tR}]_{ab}$ normaliser, leaving a smooth
+telescope analytically into the $\sum_s\log[e^{tR}]_{a_sb_s}$ normaliser, leaving a smooth
 integrand. The partition function of
 $\Pi$ cancels from every rate ratio in \eqref{eq:sqrtmet}, entering only the root factor
 of the tree likelihood. Both contractions below rely on log-linearity making the log-rate
@@ -749,7 +749,7 @@ ratio a \emph{potential difference},
 for coupled pairs, where it is exactly closed-form, against exact $[e^{tQ}]$ over branch
 length $t$, for the \Metrop\ chain and the three strongest-coupled mixture components.
 \emph{Left:} global Spearman between ELBO and exact log-transition entries (solid) stays
-$\approx1$, well above the coupling-free product baseline $[e^{tR}]$ (dashed).
+$\approx1$, well above the coupling-free product baseline $\prod_s[e^{tR}]_{a_sb_s}$ (dashed).
 \emph{Right:} mean gap exact$-$approx; the ELBO is a lower bound near zero for
 $t\lesssim1$, growing at long branches and strong coupling, while the baseline is not a
 bound.}
