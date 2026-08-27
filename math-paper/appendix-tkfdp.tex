@@ -892,6 +892,157 @@ Linzner \& Koeppl~\citep{linznerkoeppl2018}, or for fallback to
 exact uniformization-based bridge sampling via Rao \&
 Teh~\citep{raoteh2013}.
 
+\subsubsection*{Fixed product-bridge path ELBO}
+\label{sec:fixed-bridge-elbo}
+
+The scheme above optimises an inhomogeneous variational rate. A cheaper
+bound, used for the coupled substitution models of the companion paper,
+fixes the variational law outright: it is the product of endpoint-conditioned
+bridges of a single \emph{time-homogeneous} generator. Everything below is
+stated for one branch of length $t$ with endpoints $x(0)=a$, $x(t)=b$.
+
+Let the cluster $C$ carry $L = |C|$ sites with Potts target
+$\Pi(x) \propto e^{-E(x)}$ on $\mathcal{A}^L$,
+$E(x) = -\sum_s h_s(x_s) - \sum_{s<s'} H_{ss'}(x_s, x_{s'})$, let
+$R_{ic} = S_{ic}\pi_c$ be a single-site GTR proposal acting site-wise, and let
+$W$ be the square-root Metropolis target rate for the move $x \to x^{s:c}$
+that replaces residue $i = x_s$ by $c$,
+\[
+    W_{x, x^{s:c}}
+    = R_{ic}\sqrt{\frac{\Pi(x^{s:c})R_{ci}}{\Pi(x)R_{ic}}}
+    = S_{ic}\sqrt{\pi_i \pi_c}\; e^{-\frac12 \Delta^c_s E(x)},
+    \qquad
+    \Delta^c_s E(x) = E(x^{s:c}) - E(x),
+\]
+which is reversible with respect to $\Pi$ for any $S, h, H$. Among acceptance
+functions $A(z) \propto z^\theta$, reversibility ($A(z) = z A(1/z)$) forces
+$\theta = \tfrac12$, so the square root is the unique log-linear reversible
+choice; it is also the unique one for which the partition function of $\Pi$
+cancels from every rate ratio.
+
+\paragraph{The bound.} Girsanov's formula for jump processes writes the
+log-density ratio of the two path measures as a difference of complete-data
+log-likelihoods: for a trajectory $\mathbb{X}$ with transition usages $U$ and
+dwell times $T$,
+\[
+    \log \frac{d\mathbb{P}_W}{d\mathbb{P}_R}(\mathbb{X})
+    = \ell_W(\mathbb{X}) - \ell_R(\mathbb{X}),
+    \qquad
+    \ell_Q(\mathbb{X}) = \sum_{x \neq y} U_{xy} \log Q_{xy}
+        - \sum_x T_x\, q(x),
+\]
+with $q(x) = \sum_{y \neq x} Q_{xy}$ the exit rate. The reference measure
+(counting measure on jump counts $\times$ Lebesgue measure on jump times)
+carries no dependence on the generator, so this is a genuine Radon--Nikodym
+derivative and $\ell_Q$ has no additive $Q$-independent term. Averaging over the
+$R$-bridge and applying Jensen's inequality gives
+\begin{equation}
+\label{eq:fb-pathelbo}
+    \mathcal{L}_{ab}
+    = \log\bigl[e^{tR}\bigr]_{ab}
+    + \sum_{x, s, c \neq x_s} \bar N^{ab}_{x, s:c}
+        \log \frac{W_{x, x^{s:c}}}{R_{x_s c}}
+    - \sum_x \bar T^{ab}_x \bigl[w(x) - r(x)\bigr]
+    \;\leq\; \log\bigl[e^{tW}\bigr]_{ab},
+\end{equation}
+where $w, r$ are the exit rates of $W, R$ and $\bar T, \bar N$ are the
+endpoint-conditioned dwell and usage statistics of the $A^L$-state product
+chain. Equation~\eqref{eq:fb-pathelbo} is the mean-field free energy of Cohn et
+al.~\citep{cohn2010} evaluated at one member of their factored family, so their
+Theorem~3 certifies it; it is not the optimal member, and is therefore looser
+than the fixed point of the previous subsection. In exchange the bridge rates
+never appear: the factors $\log[e^{(t-u)R}]_{yb}$, which diverge as $u \to t$
+for $y \neq b$ and are the source of the endpoint stiffness in the
+inhomogeneous scheme, telescope analytically into the normaliser
+$\log[e^{tR}]_{ab}$.
+
+\paragraph{Log-linearity, and the two contractions.} Because the acceptance is
+log-linear, the log-rate ratio is a \emph{potential difference},
+\begin{equation}
+\label{eq:fb-potential}
+    \log \frac{W_{x, x^{s:c}}}{R_{x_s c}} = \psi(x^{s:c}) - \psi(x),
+    \qquad
+    \psi(x) = -\tfrac12 \sum_s \log \pi_{x_s} - \tfrac12 E(x).
+\end{equation}
+Both terms of \eqref{eq:fb-pathelbo} then reduce to per-site quantities, for two
+separate consequences of \eqref{eq:fb-potential}.
+
+\emph{The usage term is a boundary term.} Every jump of the product chain moves
+exactly one site, so a path is a chain $a = x_0 \to \cdots \to x_K = b$ with
+$x_k = x_{k-1}^{s_k : c_k}$, and by \eqref{eq:fb-potential} the increments
+$\psi(x_k) - \psi(x_{k-1})$ telescope to $\psi(b) - \psi(a)$ --- the same value
+for every path, whatever its length or the order of its jumps. (Equivalently:
+the energy telescopes globally, and the equilibrium term telescopes site by
+site, each site's intermediate states cancelling.) Since
+$\sum_{x,s,c} \bar N^{ab}_{x,s:c} f$ is by definition the bridge expectation of
+$\sum_{\rm jumps} f$, and the expectation of a path-independent quantity is that
+quantity,
+\begin{equation}
+\label{eq:fb-telescope}
+    \sum_{x, s, c \neq x_s} \bar N^{ab}_{x, s:c}
+        \log \frac{W_{x, x^{s:c}}}{R_{x_s c}}
+    = \tfrac12 \sum_s \log \frac{\pi_{a_s}}{\pi_{b_s}}
+      + \tfrac12 \bigl[E(a) - E(b)\bigr].
+\end{equation}
+No bridge statistic and no integral is required, and the couplings enter through
+the endpoints alone.
+
+\emph{The dwell term contracts to a one-dimensional integral.} The product chain
+has $M_{ab}(t) = \prod_s M^s_{a_s b_s}(t)$ with $M^s(u) = e^{uR}$, so
+$\bar T^{ab}_x = \int_0^t \prod_s p^s_u(x_s)\, du$ and hence, for any $\phi$,
+\begin{equation}
+\label{eq:fb-contract}
+    \sum_x \bar T^{ab}_x\, \phi(x) = \int_0^t \mathbb{E}_u[\phi]\, du,
+    \qquad
+    p^s_u(y) = \frac{M^s_{a_s y}(u)\, M^s_{y b_s}(t-u)}{M^s_{a_s b_s}(t)},
+\end{equation}
+with $\mathbb{E}_u$ the expectation under the product measure $\prod_s p^s_u$:
+the sum over $\mathcal{A}^L$ has become a time integral of an expectation over
+\emph{independent} sites. Now $-\tfrac12 \Delta^c_s E(x)$ is a sum over the
+neighbours of $s$, so $W$ is a \emph{product} over them, and the expectation of
+a product of functions of distinct independent sites is the product of the
+expectations,
+\begin{equation}
+\label{eq:fb-sep}
+    \mathbb{E}_u\bigl[W_{x, x^{s:c}}\bigr]
+    = \sum_i p^s_u(i)\, S_{ic} \sqrt{\pi_i \pi_c}\;
+        e^{\frac12 [h_s(c) - h_s(i)]}
+        \prod_{s' \neq s} \Bigl(
+            \sum_z p^{s'}_u(z)\; e^{\frac12 [H_{ss'}(c,z) - H_{ss'}(i,z)]}
+        \Bigr).
+\end{equation}
+Every factor is a single sum over one site's alphabet, so the $A^L$
+configuration sum never forms, even though the exit rate depends on all
+neighbours jointly and nonlinearly: what is required is \emph{separability}
+across neighbours, not linearity. A genuinely $k$-body term in $E$ would cost
+$A^k$. The proposal exit rate $r$ is one-body and contracts likewise. At each
+quadrature node, evaluating \eqref{eq:fb-sep} costs $O(A^3)$ per coupled pair
+and $O(A^2)$ per site, so the bound costs $O\bigl(m(L A^2 + P A^3)\bigr)$ for
+$m$ quadrature nodes and $P$ coupled pairs --- polynomial in cluster size rather
+than exponential.
+
+\paragraph{When the time integral is exact.} Factorisation across sites is not
+factorisation across time: $\int_0^t \prod_{s} \neq \prod_{s} \int_0^t$, so
+\eqref{eq:fb-contract} leaves a genuine integral. Each $p^s_u$ is a sum of $A^2$
+exponentials in $u$, with exponents $\xi_k - \xi_l$ drawn from the spectrum of
+$R$; the integrand of \eqref{eq:fb-sep} is a product of one such sum per coupled
+site, $L$ in all. For $L = 2$ that product is of two, the integral is the
+exponential divided-difference kernel of Holmes \& Rubin~\citep{HolmesRubin2002},
+and $\mathcal{L}_{ab}$ is exactly closed-form. For $L > 2$ the expansion carries
+$A^{2L}$ terms; grouping the product eigenvalues $\sum_s \xi_{k_s}$ into their
+$\binom{L+A-1}{A-1}$ multiplicity classes reduces this substantially but not
+enough to be practical at $A = 20$, and we integrate numerically instead.
+Because $h$, $H$, $S$ and $\pi$ enter \eqref{eq:fb-sep} only as $u$-independent
+weights, the exponents are set by $R$ alone and are bounded by $L\rho(R)t$ with
+$\rho$ the spectral radius; the integrand is therefore entire and
+Gauss--Legendre converges spectrally. With $R$ set to LG08 and normalised to one
+expected substitution per unit time, $m \leq 14$ nodes reach machine precision
+for $L \leq 5$, $t \leq 3$ and couplings up to $|H| \sim 4$, the required $m$
+growing roughly as $6 + L\rho(R)t/3$. It is this conditioning, rather than any
+closed form, that distinguishes the bound from the inhomogeneous mean field,
+whose endpoint-singular rate integral converges at first order.
+
+
 \begin{remark}[What the mean-field bound recovers: direct vs.\ indirect
 coupling]
 \label{rem:mf-recovers}
@@ -1325,7 +1476,9 @@ constant rate $\Leftrightarrow$ bare-$\eqm$ jump $\Leftrightarrow$
 exact Ewens marginal; per-state rate $\Leftrightarrow$ tilted jump
 $\Leftrightarrow$ non-Ewens marginal.
 
-\paragraph{Carry vs.\ resample under a modulator jump.} When any
+\paragraph{Carry vs.\ resample under a modulator jump.}
+\label{par:arch-carry-resample}
+When any
 modulator $\theta$ jumps and resets the modulated layer's
 generator, the modulated state $x$ is either carried (kept) or
 resampled. Detailed balance across the jump leaves the residual
@@ -1827,13 +1980,10 @@ linear functional $f$ of $\tau$ are
 This linearity lets us evaluate every SS attribution by calling each
 single-$\delta$ primitive twice --- once at $\delta_1$, once at
 $\delta_2$ --- and taking the $a_1, a_2$-weighted sum. No mixture-
-specific closed forms are needed. The reference implementation
-(\texttt{gtr\_free\_end\_hr\_avg\_case1\_jax},
-\texttt{gtr\_transition\_avg\_case1\_jax}) is machine-precision
-verified against the joint (field $\times$ residue) matrix-exp
-sufficient statistics
-(\texttt{tests/dynfield/test\_hr\_full\_ratematrix.py}, relative
-error $\lesssim 10^{-14}$ across the full parameter grid).
+specific closed forms are needed. The construction is verified against
+the joint (field $\times$ residue) matrix-exponential sufficient
+statistics to relative error $\lesssim 10^{-14}$ across the full
+parameter grid.
 
 \emph{First-segment $W, U$ in terms of $H$.}
 The free-end dwell (start at $X_n$, $\tau_1$ drawn from case-1 density with
@@ -2078,8 +2228,7 @@ $\{\rho, g_\tau\}$ terms against $Q_\theta[i, j] = \rho_{\text{chain}}
 \rho[j]$ ($i \ne j$), and use
 $\int_0^t 1\, ds = t$, $\int_0^t g_s\, ds = (1 - g_t)/\rho_{\text{chain}}$,
 $\int_0^t g_s\, g_{t-s}\, ds = t\, g_t$. This is verified against
-Gillespie in~\texttt{tests/dynfield/test\_hr\_stats\_closed\_form.py}
-(test~\texttt{test\_field\_bridge\_EN\_matches\_gillespie}).
+Gillespie simulation.
 
 \paragraph{Per-destination arrival counts.}
 The bridge-conditional expected count of field jumps that \emph{arrive}
@@ -2113,8 +2262,8 @@ to get
 with $I_1 := (1 - g_t)/\rho_{\text{chain}}$, $d_{ai} := \delta_{a, i} - \rho[i]$,
 and $d_{ib} := \delta_{i, b} - \rho[b]$.
 Summing~\eqref{eq:arch-arrivals-closed} over $i$ recovers
-\eqref{eq:arch-Ntheta-closed} (analytic identity, verified in
-\texttt{test\_field\_bridge\_hr\_matches\_direct}).
+\eqref{eq:arch-Ntheta-closed} (an analytic identity, verified
+numerically).
 
 \paragraph{Case-$M{=}1$ second-segment V attribution via time reversal.}
 The case-$M{=}1$ second segment $[\tau_1, t]$ has resampled start
@@ -2151,7 +2300,7 @@ ignores the residue-endpoint bias captured by
 \eqref{eq:arch-Vsecond-closed} and can be off by
 $P^{k_1}(Y_n \to a; \cdot)/\eqm^{(k_1)}[a]$, which is
 $\gg 1$ at $a \approx Y_n$ and short remaining branch length. Verified
-in \texttt{test\_gtr\_transition\_avg\_case1\_matches\_gillespie}.
+against Gillespie simulation.
 
 \paragraph{HR under soft leaves (PSWM observations).}
 \label{par:arch-hr-soft}
@@ -2748,7 +2897,7 @@ node. On a tree $\mathcal{T}$ with branch lengths, the correct joint
 Felsenstein-on-DP recursion carries state $(\theta_v, r_1, \ldots,
 r_{m})$ at every node $v$ and is exponential in tree depth,
 because the per-node conditional-likelihood-vector (CLV) factorisation
-\eqref{eq:dynfield-clv-factor} holds only conditional on
+\eqref{eq:arch-elbo-clv-form} holds only conditional on
 $\theta_v$: at an internal node with two or more children, the
 field-marginal combine re-couples the columns through the shared
 parent field.
@@ -2915,8 +3064,7 @@ $s_1 s_2$ constant term contributes only to $s_p$; it drops out of
 $A_p$'s numerator because the family's scalar-per-site marginal $s_p
 \cdot \langle \eqm, 1 \rangle_{n'} = s_p$ absorbs it directly. The
 family invariant $\langle \eqm, A_p \rangle_n = 1$ follows by direct
-computation using $\langle \eqm, A_i \rangle = 1$. This is the
-implementation of \texttt{mm\_combine} in \texttt{mm\_clv.py}.
+computation using $\langle \eqm, A_i \rangle = 1$.
 
 \emph{Cost.} Building per-site inner products $\langle \eqm,
 A_1 A_2 \rangle_n$ is $O(A)$ per (site, $\theta$); combining is $O(A)$
@@ -2930,8 +3078,7 @@ rank-1). It is also exact at depth-1 cherries. At depth-2 and deeper,
 per-branch $s > 0$ activates the projection and induces the
 first-order moment-matching bias. Empirically the residual is
 $< 1\%$ in log-likelihood on random depth-2 trees at
-$\rho_{\text{chain}} \in [0.1, 1.5]$
-(cf.\ \texttt{tests/phylo\_elbo/test\_mm\_clv\_depth2\_exact.py}).
+$\rho_{\text{chain}} \in [0.1, 1.5]$.
 
 The rest of this paragraph is discarded --- it derived a projection
 under an incorrect CLV form that took the scalar as
@@ -3404,8 +3551,8 @@ sibling-merge points, and finally state the concrete update rule.
 \emph{Setup.} On a rooted tree $\mathcal{T}$ with the compound-CTMC
 generative model (root state drawn from
 $\rho_\theta \prod_n \eqm^{(\arch[c_n, \theta])}(x_n)$; each branch
-of length $\tau$ transports $(x, \theta)$ under the joint kernel of
-\eqref{eq:dynfield-transition}), define the standard Felsenstein
+of length $\tau$ transports $(x, \theta)$ under the joint kernel
+above), define the standard Felsenstein
 partials
 \begin{align}
 F_v(x_v, \theta_v) &\;\equiv\; P(\text{obs at leaves under } v \mid x_v, \theta_v)
@@ -3452,8 +3599,7 @@ through the branch $p \to v$, summed on the source side (parent) rather
 than the destination side (as in the forward sweep).
 
 \emph{Kernel decomposition.} Under Interp 2, the joint kernel factors
-into no-jump and $\geq\!1$-jump components (equations
-\eqref{eq:dynfield-transition}--\eqref{eq:dynfield-weights}):
+into no-jump and $\geq\!1$-jump components:
 \begin{equation}
 K(x_v, \theta_v \mid x_p, \theta_p; \tau) =
     \underbrace{\beta(\theta_p, \tau) \delta_{\theta_v = \theta_p}
@@ -3568,7 +3714,7 @@ s_D(\theta_v) &= \beta(\theta_v, \tau)\, s_M(\theta_v)
 \end{align}
 
 The three closed-form updates constitute the backward analog of the
-forward \texttt{mm\_edge}. Compared to the forward propagation:
+forward edge propagation. Compared to it:
 \begin{itemize}[leftmargin=1.6em]
 \item The rank-1 magnitude $r_M(\theta_v) \to r_D(\theta_v)$ transforms
     identically ($\beta$-scaling at the diagonal $\theta_p = \theta_v$).
@@ -3598,7 +3744,7 @@ stationary under reversibility).
 aggregate $M_v = D_p \cdot \prod_i U_{s_i \to p}$ is a product of
 several (rank-1 + scalar) forms and must be projected back onto the
 family before the edge propagation above can be applied. Under the
-moment-matching rule of \texttt{mm\_combine}, each pairwise product
+moment-matching combine rule, each pairwise product
 of terms $[r_1 R_1 + s_1] \cdot [r_2 R_2 + s_2]$ decomposes into
 $r_1 r_2 R_1 R_2 + r_1 s_2 R_1 + s_1 r_2 R_2 + s_1 s_2$; the scalar
 component $s_1 s_2$ is kept as the projected scalar, and the three
@@ -3655,8 +3801,7 @@ $(x_v, x_u)$ at all sites but one, each site's pair distribution
 $q_{vu, n}(x_{v, n}, x_{u, n} \mid \theta_v, \theta_u)$ is a mixture
 over $2 \times 2 = 4$ terms (no-jump vs.\ jump, tracking vs.\ regenerated
 sources at each end), each of which factorises across sites given
-$(\theta_v, \theta_u)$. The concrete formulas appear in
-Algorithm~\ref{alg:arch-elbo-hr} below.
+$(\theta_v, \theta_u)$. The concrete formulas appear below.
 
 \paragraph{Field-jump-count decomposition of a branch.}
 \label{par:arch-phylo-elbo-jumps}
@@ -3744,7 +3889,7 @@ U^{(M \geq 1)}_{i, j}
 \end{align}
 with $\mathrm{Arr}$, $P_{\mathrm{avg}}^{\mathrm{last}}$, and the
 $\mathrm{first}/\mathrm{last}$-segment HR primitives all computed by
-the case-1 closed forms of Sections~\ref{par:arch-hr}--\ref{par:arch-hr-cluster}
+the case-1 closed forms of Sections~\ref{par:arch-hr}--\ref{par:arch-hr-soft}
 (specifically \eqref{eq:arch-Wfirst-mix}--\eqref{eq:arch-Ulast-mix}
 for $W^{\mathrm{first}, \mathrm{last}}, U^{\mathrm{first}, \mathrm{last}}$,
 \eqref{eq:arch-Etau1-mix}--\eqref{eq:arch-EtauM-mix} for
@@ -3777,7 +3922,7 @@ per-site pair distribution) plus $O(L^2 \cdot m \cdot A)$ (spectral
 integration), rather than the naive $O(A^{2m})$ or even $O(A^4)$
 per-site cost that a direct enumeration of the $(x_v, x_u)$ pairs
 would require. This mirrors the ``accumulate sums in eigenspace''
-trick of the composite HR pass (Section~\ref{par:arch-hr-cluster}).
+trick of the composite HR pass (Algorithm~\ref{alg:arch-hr-cluster}).
 
 \paragraph{Obtaining HR sufficient statistics from the ELBO'd tree.}
 \label{par:arch-phylo-elbo-hr}
@@ -3860,7 +4005,7 @@ forward CLVs $F_v, F_u$ and backward CLVs $D_v, D_u$
       \label{eq:arch-elbo-Nsum-Tsum}
     \end{equation}
     with $\mathbb{E}[N_\theta \mid \theta_v, \theta_u, \tau_{vu}]$ from
-    the bridge-conditional field expectation \eqref{eq:arch-Nbridge}.
+    the bridge-conditional field expectation \eqref{eq:arch-Ntheta-bridge}.
 \end{enumerate}
 
 Under the moment-matching family the per-branch cost is dominated by
@@ -3908,7 +4053,7 @@ is adequate when (a) the corpus is presented as a set of aligned pairs
 without tree structure, or (b) the composite-likelihood artifact
 diagnostics (cross-cherry $\theta_P$ entropy vs.\ mean within-cherry
 jump probability) show no artifact. When either condition fails --- as
-in the training runs of Section~\ref{sec:experiments} where the
+in the training runs reported in the main text, where the
 diagnostic reports $\geq 65\%$ of clusters in the artifact quadrant ---
 tree-ELBO training becomes the preferred regime.
 
@@ -4067,9 +4212,8 @@ for variant bins.
 \emph{Efficient inference by rate-eigenvalue scaling.} Since
 $Q^{(k, s)}$ shares the eigenvectors $U^{(k)}, D^{(k)}$ of $Q^{(k)}$
 and differs only by scaling the eigenvalues by $m^{\mathrm{site}}_{b_s}$,
-every closed-form HR primitive (bridge \eqref{eq:hr-bridge},
-free-end \eqref{eq:hr-freeend}, case-$1$ transition average
-\eqref{eq:hr-caseavg}) can be evaluated at any bin by substituting
+every closed-form HR primitive (bridge, free-end, and case-$1$
+transition average) can be evaluated at any bin by substituting
 $\xi^{(k)} \mapsto m^{\mathrm{site}}_{b_s} \cdot \xi^{(k)}$
 inside the per-site call. No re-diagonalisation is required; the
 $K_a$ archetype eigendecompositions computed once per outer iter
@@ -4082,8 +4226,7 @@ faster than a naive per-bin re-diagonalisation.
 $b_s$ is treated as persistent state; the HR pass applies each
 site's rate multiplier $m^{\mathrm{site}}_{b_s}$ to $\xi^{(k)}$ at
 every iteration without additional per-bin evaluation cost. Two
-update regimes are supported (controlled by the trainer
-\texttt{--site-resample-every R} flag):
+update regimes are available, controlled by a site-resampling period $R$:
 \begin{enumerate}
   \item \emph{$\Gamma$-only init, no resample ($R = 0$).} Bins are drawn
     uniformly over the $\Gamma$ quantile bins ($1 \ldots K_r^{\mathrm{site}}$)
@@ -4118,8 +4261,8 @@ likelihood on the second cherry. The witness-site convention above
 removes this obstruction (invariant bin now emits
 $\eqm^{(k(c, \theta_Y))}_Y > 0$ in the jump case) and enables
 $+\Gamma + I$ under the per-cherry Gibbs directly. The pre-witness-site
-$\Gamma$-only sub-model remains available as an A/B baseline through
-the \texttt{allow\_invariant=False} option of the Gibbs sampler.
+$\Gamma$-only sub-model is recovered as an A/B baseline by disallowing
+the invariant bin.
 %
 The Gibbs conditional is Rao-Blackwellised over the field
 trajectory:
@@ -5570,7 +5713,7 @@ endpoint-amino-acid index $c$.
 
 The empirical class prior $\pi_c$ is the per-class column count
 from training (\emph{not} uniform $1 / K_c$); the per-class profile
-$\pi^{(c)}(\cdot)$ is the trained \texttt{pi\_class}; the
+$\pi^{(c)}(\cdot)$ is the trained per-class profile; the
 class-conditional transition is
 \begin{equation}
 \label{eq:p-class-cond}
@@ -5583,12 +5726,12 @@ the standard F81-form GTR generator with exchangeability
 $S_{\mathrm{LG08}}$~\citep{LG08} and class-specific stationary
 $\pi^{(c)}$. The joint stationary
 $\pi_{\mathrm{joint}}^{c_1, c_2}(a, c)$ at a coupled cell-pair is
-the joint stationary of a Potts atom $H = \mathtt{atoms}[\mathtt{assignments}[c_1, c_2]]$
-at the trained checkpoint (the trained
-\texttt{potts\_dp.atoms} indexed by \texttt{potts\_dp.assignments}),
-and $P_{\mathrm{joint}}^{c_1, c_2}$ is its time-evolved transition
-$\exp(Q_{\mathrm{joint}}^{c_1, c_2}(H) \cdot t)$ built by
-\texttt{build\_joint\_Q\_pair}$(H, \pi_a, \pi_b, S, \eta_{\mathrm{pair}} = (\eta_1, \eta_2))$
+the joint stationary of the Potts atom $H_{c_1 c_2}$ assigned to that
+class pair by the atom DP, and $P_{\mathrm{joint}}^{c_1, c_2}$ is its
+time-evolved transition
+$\exp(Q_{\mathrm{joint}}^{c_1, c_2}(H_{c_1 c_2}) \cdot t)$, with
+$Q_{\mathrm{joint}}^{c_1, c_2}$ built from
+$(H_{c_1 c_2}, \pi_a, \pi_b, S, \eta_{\mathrm{pair}})$
 as described in \S\ref{sec:gtr-potts}.
 
 \paragraph{Pair-background convention for the joint generator.}

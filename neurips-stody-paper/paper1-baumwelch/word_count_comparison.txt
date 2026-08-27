@@ -1,0 +1,32 @@
+Word-count comparison: original PSB vs. revised NeurIPS paper
+================================================================
+
+Section                         Original PSB   New NeurIPS   Change
+Abstract                                  331           306   -25 (-7.6%)
+Introduction                              669           573   -96 (-14.3%)
+Section 2: Closed-form Baum-Welch        1,043           802   -241 (-23.1%)
+----------------------------------------------------------------
+Total                                    2,043         1,681   -362 (-17.7%)
+
+The counts use the rendered section boundaries and were cross-checked
+with texcount, excluding comments and LaTeX commands.
+
+Qualification
+-------------
+
+Approximately 182 words of the reduction in Section 2 result from moving
+"The substitution model M-step" to the appendix rather than deleting it.
+This still saves space in the main paper because the appendix is outside
+the content-page limit.
+
+Including the relocated appendix text, the material is shorter by about
+176 words, or approximately 8.6%. 
+
+Files compared
+--------------
+
+Original:
+/Users/annabel/Desktop/neurIPS_workshops/tkf-dp/psb-paper/paper1-baumwelch.pdf
+
+Revised:
+/Users/annabel/Desktop/neurIPS_workshops/neurips-paper1/neurips_workshop_paper1.pdf
