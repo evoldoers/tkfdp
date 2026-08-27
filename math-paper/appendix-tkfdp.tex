@@ -785,6 +785,71 @@ $\geq 0$ by Jensen, so $\mathrm{KL}_{b, s} \geq 0$ and the ELBO is a
 strict lower bound on $\log P$, as required.
 \end{proposition}
 
+\begin{remark}[The geometric-mean rate is reversible: the optimum has
+$|\mathcal{A}|-1$ free parameters, not $|\mathcal{A}|(|\mathcal{A}|-1)$]
+\label{rem:geomean-reversible}
+The variational family nominally admits an arbitrary --- in particular
+irreversible --- rate matrix on each branch and site, with
+$|\mathcal{A}|(|\mathcal{A}|-1)$ free entries. The stationary point does not use
+that freedom. Whenever $\log Q^s(x \to x'; x_{C \setminus s})$ is affine in the
+neighbour configuration, as it is for the square-root Metropolis Potts rate of
+\Cref{sec:fixed-bridge-elbo}, the neighbour average acts only on the site's own
+field: writing $i \to c$ for the move at site $s$,
+\[
+    \log \hat Q^{s,*}(i \to c)
+    = \mathbb{E}\bigl[\log W_{x, x^{s:c}}\bigr]
+    = \log\bigl(S_{ic}\sqrt{\pi_i \pi_c}\bigr)
+      + \tfrac12\bigl[\tilde h(c) - \tilde h(i)\bigr],
+    \qquad
+    \tilde h(x) = h_s(x) + \sum_{s' \neq s} \mathbb{E}\bigl[H_{ss'}(x, x_{s'})\bigr],
+\]
+the expectation being over the instantaneous neighbour marginals
+$q^{s'}_b(\cdot; u)$ in the inhomogeneous case and over their time averages
+$\bar q^{s'}_b$ in the constant-rate case. Hence
+$\hat Q^{s,*}_{ic} = S_{ic}\sqrt{\pi_i \pi_c}\,
+e^{\frac12[\tilde h(c) - \tilde h(i)]}$, and
+\[
+    \nu_i\, \hat Q^{s,*}_{ic}
+    \;=\; S_{ic}\sqrt{\pi_i \pi_c}\; e^{\frac12[\tilde h(i) + \tilde h(c)]}
+    \;=\; \nu_c\, \hat Q^{s,*}_{ci},
+    \qquad \nu \propto e^{\tilde h},
+\]
+which is symmetric in $(i, c)$: the optimal rate is reversible with respect to
+the mean-field marginal $\nu$ of $\Pi$ at site $s$. The optimum therefore lies
+in the reversible submanifold parameterised by the single effective field
+$\tilde h$, that is $|\mathcal{A}|-1$ numbers per site and branch rather than
+$|\mathcal{A}|(|\mathcal{A}|-1)$, and $\tilde h$ is obtained from the neighbour
+marginals by one matrix--vector product per contact. Allowing irreversibility
+adds parameters the optimiser does not move.
+\end{remark}
+
+\begin{remark}[Why the constant-rate M-step has no closed form]
+\label{rem:mstep-degenerate}
+The obstruction is structural rather than merely algebraic. For a constant rate
+$\Gamma$ on a branch, the bound is
+$\mathcal{L}(\Gamma) = \log[e^{t\Gamma}]_{ab}
++ \sum_{i \neq j} \bar N^\Gamma_{ij} \log(W_{ij}/\Gamma_{ij})
+- \sum_i \bar T^\Gamma_i (w_i - \gamma_i)$,
+and the log-normaliser satisfies the exponential-family identity
+\[
+    \frac{\partial}{\partial \Gamma_{ij}} \log\bigl[e^{t\Gamma}\bigr]_{ab}
+    \;=\; \frac{\bar N_{ij}}{\Gamma_{ij}} - \bar T_i .
+\]
+Differentiating $\mathcal{L}$ with the bridge statistics held fixed, as an
+M-step would, gives
+$(\bar N_{ij}/\Gamma_{ij} - \bar T_i) - \bar N_{ij}/\Gamma_{ij} + \bar T_i = 0$
+identically: every $\Gamma$ is a stationary point of the frozen objective. The
+entire gradient is carried by the sensitivity of $\bar N$ and $\bar T$ to
+$\Gamma$, and is a covariance,
+$\partial \mathcal{L} / \partial \Gamma_{ij}
+= \operatorname{Cov}_{\mathbb{Q}}\bigl(\log \tfrac{d\mathbb{P}_W}{d\mathbb{Q}},\,
+U_{ij}/\Gamma_{ij} - T_i\bigr)$,
+requiring second moments of the endpoint-conditioned statistics rather than the
+first moments that suffice elsewhere. This is why the geometric-mean rate above,
+which is exact only under the mean-field-of-bridges assumption, is the practical
+choice.
+\end{remark}
+
 \begin{remark}[Closed-form ELBO via pairwise bridge expectations]
 \label{rem:bridge-expectations}
 Each rate $\hat Q^s_b$ admits an eigendecomposition
