@@ -773,6 +773,14 @@ def main():
                    '"--fam-subset BB12041 --pair-subset 0,1" runs only '
                    'the (seq0, seq1) pair of BB12041. Multiple pairs '
                    'can be passed: "--pair-subset 0,1;0,2;1,2".')
+    p.add_argument('--no-coverage-check', dest='coverage_check',
+                   action='store_false', default=True,
+                   help='Skip the preflight check that the eligible-family '
+                   'enumeration matches analysis/balibase_l150_coverage.json '
+                   '(22 families / 187 pairs). On by default: a corpus that '
+                   'enumerates short still produces a valid-looking '
+                   'aggregate over a smaller denominator. Pass this only '
+                   'when a different corpus is genuinely intended.')
     args = p.parse_args()
     if args.n_re_replicates is None:
         args.n_re_replicates = 4 if args.mcmc_diagnostics else 1
@@ -823,6 +831,24 @@ def main():
     elig = find_eligible_families(max_len=args.max_len)
     print(f"Eligible families ({len(elig)}, max_len<{args.max_len}): "
           f"{[f for f, _, _ in elig]}", flush=True)
+
+    # Preflight: validate the ENUMERATION, before any GPU work. This runs
+    # on the full eligibility list, not the post---fam-subset list, so a
+    # single-pair AWS worker still catches a launcher that mis-enumerated
+    # the corpus -- which is exactly the 2026-05 failure, where n_seqs was
+    # under-counted on BB12014/BB20008/BB30015 and needed a 31-pair
+    # recovery batch that was only noticed after the fact.
+    if args.coverage_check:
+        from balibase_coverage import assert_coverage, load_manifest
+        _man = load_manifest()
+        if int(args.max_len) != int(_man["max_len"]):
+            print(f"[sweep preflight] SKIPPED: --max-len {args.max_len} "
+                  f"differs from the manifest's {_man['max_len']}; the "
+                  f"expected set does not apply to this design.", flush=True)
+        else:
+            assert_coverage({f: n * (n - 1) // 2 for f, n, _ in elig},
+                            _man, label="sweep preflight")
+
     elig.sort(key=lambda r: r[2])
 
     # Optional family-subset filter for parallel multi-GPU runs. The

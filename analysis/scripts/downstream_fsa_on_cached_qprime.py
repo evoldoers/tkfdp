@@ -83,6 +83,15 @@ def main():
                         'k in [0, fsa_n_seeds).')
     p.add_argument('--fsa-anneal-iters', type=int, default=3,
                    help='Inner annealing iterations per FSA call.')
+    p.add_argument('--no-coverage-check', dest='coverage_check',
+                   action='store_false', default=True,
+                   help='Skip the check that the stitched result covers '
+                   'analysis/balibase_l150_coverage.json (22 families / 187 '
+                   'pairs). On by default, and fatal: a short stitch still '
+                   'produces a numerically valid aggregate over a smaller '
+                   'denominator, which is how a 155-pair result once got '
+                   'compared against 187-pair rows. Automatically skipped '
+                   'when --families restricts the set.')
     args = p.parse_args()
 
     cache_root = Path.home() / '.cache' / 'tkf-mixdom-balibase' / args.method
@@ -98,6 +107,29 @@ def main():
         available = [f for f in available if f in wanted]
     print(f"Processing {len(available)} cached families from {cache_root}",
            flush=True)
+
+    # Fail fast on a partially-synced cache, before the FSA work. This only
+    # compares the family set; per-family pair counts are not known until
+    # the arrays are read, and are checked again before the result is
+    # written.
+    coverage_manifest = None
+    if args.coverage_check and not args.families:
+        from balibase_coverage import load_manifest
+        coverage_manifest = load_manifest()
+        missing = sorted(set(coverage_manifest['families']) - set(available))
+        if missing:
+            print(f"ERROR: cache is missing {len(missing)} expected "
+                  f"famil{'y' if len(missing) == 1 else 'ies'}: "
+                  f"{', '.join(missing)}\n"
+                  f"Expected {coverage_manifest['n_families']} families / "
+                  f"{coverage_manifest['n_pairs']} pairs per "
+                  f"analysis/balibase_l150_coverage.json. Finish syncing the "
+                  f"Q' cache, or pass --no-coverage-check if a different "
+                  f"subset is intended.", file=sys.stderr)
+            return 1
+    elif args.coverage_check and args.families:
+        print("[coverage] SKIPPED: --families restricts the family set.",
+              flush=True)
 
     in_dir = Path(args.balibase_dir) / 'in'
     ref_dir = Path(args.balibase_dir) / 'ref'
@@ -347,6 +379,21 @@ def main():
                 / max(1, corpus['msa_score_count'])),
         },
     }
+    # Gate the write. This is the last step before a number reaches
+    # tab:aln, so an incomplete stitch must not leave a result file behind
+    # that looks indistinguishable from a complete one.
+    if coverage_manifest is not None:
+        from balibase_coverage import (CoverageError, assert_coverage,
+                                       observed_from_per_family)
+        try:
+            assert_coverage(observed_from_per_family(per_family),
+                            coverage_manifest,
+                            label='downstream stitch')
+        except CoverageError as exc:
+            print(f"\nERROR: refusing to write {args.out}.\n{exc}",
+                  file=sys.stderr)
+            return 1
+
     Path(args.out).write_text(json.dumps(output, indent=2, default=str))
     print(f"\nWrote {args.out} (corpus opt-acc F1 = "
           f"{output['corpus_aggregates']['opt_acc_F1']:.4f}, "

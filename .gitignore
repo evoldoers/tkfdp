@@ -54,3 +54,5 @@ results/*.npy
 results/*.json
 results/K4-emwarm-top1000-2026-05-09.tar.gz
 results/K4-emwarm-top1000-2026-05-09/
+data/pfam_seed_sample/
+results/progalign_balibase/aln/

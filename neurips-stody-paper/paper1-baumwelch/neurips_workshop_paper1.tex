@@ -63,6 +63,7 @@
 \usepackage{xcolor}         % colors
 
 %% ---- additional packages this paper needs ----
+\usepackage{makecell}
 \usepackage{amsmath,amssymb,bm}
 \usepackage{graphicx}
 \usepackage{array}     % >{...}p{} column specs
@@ -70,7 +71,7 @@
 \usepackage{cleveref}       % must be loaded after hyperref
 
 % Note. For the workshop paper template, both \title{} and \workshoptitle{} are required, with the former indicating the paper title shown in the title and the latter indicating the workshop title displayed in the footnote. 
-\workshoptitle{WORKSHOP TITLE}
+\workshoptitle{AI for Stochastic Dynamics}
 \title{Closed-form Baum--Welch for TKF-based evolutionary models}
 
 % The \author macro works with any number of authors. There are two commands
@@ -153,7 +154,7 @@ jointly on minibatches of sequence pairs; and an exact EM (for \MixFrag\ only)
 that recovers alignment summarization by counting run lengths.
 On a 20{,}897-family \Pfam\ training split
 (1{,}134{,}482 pairwise alignments), a two-type \MixFrag\ splits TKF92's single
-extension parameter into short ($r{\approx}0.38$) and long
+fragment-extension probability into short ($r{\approx}0.38$) and long
 ($r{\approx}0.83$) fragment modes and improves held-out likelihood by
 $\approx$1.9 nats per pair over TKF92 (indel orderings marginalized) at a cost
 of two parameters, reproducing the familiar empirical observation of the indel
@@ -197,9 +198,9 @@ TKF92 also needs the expected numbers of fragment extensions
 $F$ and fragment terminations $E$. Thus, the maximum-likelihood
 $(\ins,\del,\ext)$ are functions of $(B,D,S,F,E)$
 (\Cref{sec:tkfem}).
-Since sufficient statistics are additive over aligned columns and time bins, 
+Since sufficient statistics are additive over aligned columns (and time bins, if quantizing time), 
 an entire corpus of sequence alignments can be pre-aggregated into count tensors 
-(as done for substitution models in ~\cite{Prillo2022CherryML}). 
+(as done for substitution models in~\cite{Prillo2022CherryML}). 
 After this step, the cost of each EM iteration is 
 \emph{independent of training dataset size}. By distilling pairwise 
 alignments into continuous-time state machines, fitting TKF to tens 
@@ -207,7 +208,7 @@ of thousands of families is practical.
 
 More expressive elaborations of TKF92 have been developed to capture 
 the heterogeneous indel rates observed across natural proteins, 
-namely \MixFrag\ and \MixDom\ ~\cite{LargeHolmes2026}.
+namely \MixFrag\ and \MixDom~\cite{LargeHolmes2026}.
 In \MixFrag\ (\Cref{sec:mixfrag}), each TKF92 fragment is independently 
 drawn from a mixture of latent fragment types (abbreviated \emph{fragtype})
 $f\in\{1,\dots,\mathcal{F}\}$ with weights $w_f$. Each fragtype has
@@ -225,13 +226,13 @@ For \MixFrag, when sequence alignments are provided, we extend the counts tensor
 to include match run-length and gap block-size counts, restoring the ability 
 to train from count summaries (\Cref{sec:cherryem}).
 When training with unaligned sequences, we use stochastic variational 
-Baum--Welch (\svibw; \Cref{sec:svibw}). A minibatch EM runs pairwise 
+Baum--Welch (\svibw; \Cref{sec:svibw}). Minibatch EM runs pairwise 
 forward--backward to jointly marginalize over alignment and fragtype, 
-then takes the same closed-form M-step on each minibatch’s expected counts.
-\MixDom can only be trained with \svibw. This model's latent domain boundaries 
+then takes the same closed-form M-step on each minibatch's expected counts.
+\MixDom\ can only be trained with \svibw. This model's latent domain boundaries 
 introduce null state paths through the pair HMM.
 We show explicitly how to sum out null paths during the forward recursion, as well as 
-how to restore them during the E-step \Cref{sec:mixdom}.
+how to restore them during the E-step (\Cref{sec:mixdom}).
 
 Before presenting empirical results, we consider two further
 aspects of inference for TKF-based models.
@@ -251,13 +252,12 @@ sequence alignment benchmark.
 
 \subsection{Pair HMM and the score-function E-step}
 
-Write the TKF91 pairwise process as a conditionally-normalised pair HMM
-(in other words, a weighted finite-state transducer) defining the 
+Write the TKF91~\cite{ThorneEtAl91} pairwise process as a conditionally-normalized pair HMM defining the 
 descendant sequence and its alignment conditioned on the ancestral sequence 
 (i.e. a weighted finite-state transducer), with state set
 $\{\hst{S},\hst{M},\hst{I},\hst{D},\hst{E}\}$ (start, match, insert,
 delete, end) and transition weights $\tau_{ab}(\ins,\del,t)$. 
-The three finite-time \BDI\ factors are the founder survival, insertion-continuation, and orphan-insertion probabilities~\cite{Kendall1948,Feller1939,KarlinMcGregor1957} % AL: Originally these citations were attached to "the finite-time transition probabilities for the BDI process is known". Can I attach them here instead?
+The three finite-time \BDI\ factors are the founder survival, insertion-continuation, and orphan-insertion probabilities~\cite{Kendall1948,Feller1939,KarlinMcGregor1957} 
 \begin{equation}
 \label{eq:abg}
 \alpha \;=\; e^{-\del t}, \qquad
@@ -270,7 +270,7 @@ yielding the transition
 %\footnote{The jointly-normalized version $\tau'(\ins,\del,t)$,
 %which models $P(x,y)$ rather than $P(y|x)$,
 %incorporates the ancestral length parameter $\kappa=\ins/\del$,
-%so $\tau'_{ab} \leftarrow \kappa \tau_{ab}$ for $b\in\{\hst{M},\hst{D}\}$ (the ancestor-consuming transitions) and $\tau'_{a \hst{E}} \leftarrow (1-\kappa)\tau_{a \hst{E}}$; the insertion column $\hst{I}$ is unchanged.
+%so $\tau'_{ab} \leftarrow \kappa \tau_{ab}$ for $b\in\{\hst{M},\hst{D}\}$ (the ancestor-consuming transitions) and $\tau'_{a \hst{E}} \leftarrow (1-\kappa)\tau_{a \hst{E}}$; the insertion column $\hst{I}$ is unchanged.r
 %For the TKF92 model, the jointly-normalized transition matrix $\tau''(\ins,\del,\ext,t)$ has further fragment-extending self loops:
 %$\tau''_{ab} \leftarrow (1-\ext)\tau'_{ab} + \ext \delta_{ab}$.
 %} 
@@ -295,14 +295,14 @@ matrix
 
 For a sequence pair $(x,y)$ and elapsed evolutionary time $t$, the E-step runs
 forward--backward and returns expected transition counts
-$\hat n_{ab}=\E[\,n_{ab}\mid x,y\,]=\partial \log P(y\mid x)/\partial \log \tau_{ab}$.
+$\hat n_{ab}=\E[\,n_{ab}\mid x,y\,]=\partial \log P(y\mid x)/\partial \log \tau_{ab}$; $a,b \in \{ \hst{S}, \hst{M}, \hst{I}, \hst{D}, \hst{E} \}$.
 This equality is a form of the score-function identity. Applying the
 same identity to the continuous-time path measure yields the rate-space E-step.
 
 Let $\mathbb{X}=\bigl(X(u)\bigr)_{0\le u\le t}$ denote the trajectory: the continuous-time sample path along the branch of a phylogenetic tree.
-The sufficient statistics are $B$, the number of insertions, $D$, the number of deletions, and $S=\int_0^t X(u)\,du$, the time-integrated sequence length (which, from now on, we call the \emph{exposure}).
+The sufficient statistics are $B$, the number of insertions, $D$, the number of deletions, and $S=\int_0^t X(u)\,du$, the time-integrated sequence length (called \emph{exposure}).
 
-The Fisher-Neyman decomposition is
+The Fisher--Neyman decomposition is
 \begin{equation*}
 P(\mathbb{X}\mid X(0);\theta) = \ins^B \del^D e^{-(\ins+\del) S - \ins t} \times (\mbox{terms indep. of $\ins,\del$})
 \end{equation*}
@@ -319,71 +319,70 @@ their respective $\partial \log \tau_{ab} / \partial \log \theta$.
 The required log-derivatives $\partial\log\xi/\partial\log\theta$ are given in
 \Cref{tab:score-derivatives}.
 
+  \begin{table}[t]
+	\caption{Score derivatives $\partial\log\xi/\partial\log\theta$ of the TKF transition
+		factors $\xi\in\{\alpha,1{-}\alpha,\beta,1{-}\beta,\gamma,1{-}\gamma\}$ with respect to
+		a rate $\theta\in\{\ins,\del\}$, in the general case $\ins\neq\del$. Every entry is
+		elementary, so the E-step needs no numerical differentiation. The combined score
+		derivative $\partial/\partial\log(\ins{+}\del)$ is always the sum of the two rows.
+		Notation: $\alpha{=}e^{-\del t}$, $\eta{=}e^{-\ins t}$,
+		$\delta{=}\del\eta-\ins\alpha$ (the denominator of $\beta$), $s{=}\del t$,
+		$s_\ins{=}\ins t$, $\Phi{=}1{-}\alpha$; and $[\cdot]^{\theta}_{\xi}$ abbreviates the
+		$(\theta,\xi)$ entry.}
+	\label{tab:score-derivatives}
+	\centering
+	%\renewcommand{\arraystretch}{1.5}
+	\setlength{\tabcolsep}{4pt}
+	\begin{tabular}{ccccccc}
+		\toprule
+		& $\log\alpha$ & $\log(1{-}\alpha)$ & $\log\beta$
+		& $\log(1{-}\beta)$ & $\log\gamma$ & $\log(1{-}\gamma)$ \\
+		\midrule
+		$\dfrac{\partial}{\partial\log\ins}$
+		& $0$ & $0$
+		& $\begin{aligned} 1 &{}-\dfrac{s_\ins\eta}{\eta-\alpha}\\[2pt]
+			&{}+\dfrac{s_\ins\del\eta+\ins\alpha}{\delta}\end{aligned}$
+		& $-\dfrac{\beta}{1-\beta}\,[\cdot]^{\ins}_{\beta}$
+		& $-\dfrac{1-\gamma}{\gamma}\,[\cdot]^{\ins}_{1-\gamma}$
+		& $[\cdot]^{\ins}_{\beta}-1$ \\[10pt]
+		$\dfrac{\partial}{\partial\log\del}$
+		& $-s$ & $\dfrac{s\alpha}{\Phi}$
+		& $\begin{aligned} &\phantom{{}-{}}\dfrac{s\alpha}{\eta-\alpha}\\[2pt]
+			&{}-\dfrac{\del\eta+s\ins\alpha}{\delta}\end{aligned}$
+		& $-\dfrac{\beta}{1-\beta}\,[\cdot]^{\del}_{\beta}$
+		& $-\dfrac{1-\gamma}{\gamma}\,[\cdot]^{\del}_{1-\gamma}$
+		& $1+[\cdot]^{\del}_{\beta}-\dfrac{s\alpha}{\Phi}$ \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
 \begin{table}[t]
-\caption{Score derivatives $\partial\log\xi/\partial\log\theta$ of TKF transition
-factors $\xi\in\{\alpha,1{-}\alpha,\beta,1{-}\beta,\gamma,1{-}\gamma\}$
-with respect to a rate $\theta\in\{\ins,\del\}$.
-The combined score derivative $\partial/\partial\log(\ins{+}\del)$ is always the sum of the $\partial/\partial\log\ins$ and $\partial/\partial\log\del$ rows.
-Notation: $\alpha{=}e^{-\del t}$, $\eta{=}e^{-\ins t}$,
-$\delta{=}\del\eta-\ins\alpha$ (the denominator of $\beta$),
-$s{=}\del t$, $s_\ins{=}\ins t$, $\Phi{=}1{-}\alpha$; and
-$[\cdot]^{\theta}_{\xi}$ abbreviates the $(\theta,\xi)$ entry.}
-\label{tab:score-derivatives}
-\centering
-\footnotesize
-\renewcommand{\arraystretch}{1.9}%
-\begin{tabular}{@{}c@{}}
-\emph{General case ($\ins \neq \del$):}
-\\[4pt]
-\resizebox{\textwidth}{!}{%
-\begin{tabular}{ccccccc}
-\toprule
-& $\log\alpha$ & $\log(1{-}\alpha)$ & $\log\beta$
-& $\log(1{-}\beta)$ & $\log\gamma$ & $\log(1{-}\gamma)$ \\
-\midrule
-$\dfrac{\partial}{\partial\log\ins}$
-  & $0$ & $0$
-  & $1-\dfrac{s_\ins\eta}{\eta-\alpha}
-       +\dfrac{s_\ins\del\eta+\ins\alpha}{\delta}$
-  & $-\dfrac{\beta}{1-\beta}\,[\cdot]^{\ins}_{\beta}$
-  & $-\dfrac{1-\gamma}{\gamma}\,[\cdot]^{\ins}_{1-\gamma}$
-  & $[\cdot]^{\ins}_{\beta}-1$
-\\
-$\dfrac{\partial}{\partial\log\del}$
-  & $-s$ & $\dfrac{s\alpha}{\Phi}$
-  & $\dfrac{s\alpha}{\eta-\alpha}-\dfrac{\del\eta+s\ins\alpha}{\delta}$
-  & $-\dfrac{\beta}{1-\beta}\,[\cdot]^{\del}_{\beta}$
-  & $-\dfrac{1-\gamma}{\gamma}\,[\cdot]^{\del}_{1-\gamma}$
-  & $1+[\cdot]^{\del}_{\beta}-\dfrac{s\alpha}{\Phi}$
-\\
-\bottomrule
-\end{tabular}}
-\\[12pt]
-\emph{Equal-rate ($\ins{=}\del$) L'H\^opital limit, with $\phi{=}\Phi/s$ and $R{=}1/((1{+}s)\phi-1)$:}
-\\[4pt]
-\resizebox{\textwidth}{!}{%
-\begin{tabular}{ccccccc}
-\toprule
-& $\log\alpha$ & $\log(1{-}\alpha)$ & $\log\beta$
-& $\log(1{-}\beta)$ & $\log\gamma$ & $\log(1{-}\gamma)$ \\
-\midrule
-$\dfrac{\partial}{\partial\log\ins}$
-  & $0$ & $0$
-  & $\dfrac{s+2}{2(1+s)}$
-  & $-\dfrac{s(s+2)}{2(1+s)}$
-  & $\dfrac{Rs}{2(1+s)}$
-  & $-\dfrac{s}{2(1+s)}$
-\\
-$\dfrac{\partial}{\partial\log\del}$
-  & $-s$ & $\dfrac{s\alpha}{\Phi}$
-  & $-\dfrac{s}{2(1+s)}$
-  & $\dfrac{s^2}{2(1+s)}$
-  & $-R\!\left(\dfrac{s{+}2}{2(1{+}s)}-\dfrac{s\alpha}{\Phi}\right)$
-  & $\dfrac{s+2}{2(1+s)}-\dfrac{s\alpha}{\Phi}$
-\\
-\bottomrule
-\end{tabular}}
-\end{tabular}
+	\caption{Score derivatives in the equal-rate L'H\^opital limit $\ins{=}\del$, where the
+		general-case expressions of \Cref{tab:score-derivatives} are indeterminate. Notation is
+		as in \Cref{tab:score-derivatives}, with $\phi{=}\Phi/s$ and $R{=}1/((1{+}s)\phi-1)$.}
+	\label{tab:score-derivatives-equal}
+	\centering
+	%\renewcommand{\arraystretch}{1.5}
+	\setlength{\tabcolsep}{4pt}
+	\begin{tabular}{ccccccc}
+		\toprule
+		& $\log\alpha$ & $\log(1{-}\alpha)$ & $\log\beta$
+		& $\log(1{-}\beta)$ & $\log\gamma$ & $\log(1{-}\gamma)$ \\
+		\midrule
+		$\dfrac{\partial}{\partial\log\ins}$
+		& $0$ & $0$
+		& $\dfrac{s+2}{2(1+s)}$
+		& $-\dfrac{s(s+2)}{2(1+s)}$
+		& $\dfrac{Rs}{2(1+s)}$
+		& $-\dfrac{s}{2(1+s)}$ \\
+		$\dfrac{\partial}{\partial\log\del}$
+		& $-s$ & $\dfrac{s\alpha}{\Phi}$
+		& $-\dfrac{s}{2(1+s)}$
+		& $\dfrac{s^2}{2(1+s)}$
+		& $-R\!\left(\dfrac{s{+}2}{2(1{+}s)}-\dfrac{s\alpha}{\Phi}\right)$
+		& $\dfrac{s+2}{2(1+s)}-\dfrac{s\alpha}{\Phi}$ \\
+		\bottomrule
+	\end{tabular}
 \end{table}
 
 \subsection{BDI sufficient statistics: the bridge constraint}
@@ -409,10 +408,11 @@ counts~\cite{MininSuchard2008}, and Laplace-transform generating
 functions inverted by residues at their Cauchy
 poles~\cite{CrawfordSuchard2012,CrawfordMininSuchard2014}. Our
 linear-birth--death score identity is a special case,
-returning precisely the moments the EM step consumes. 
-For the general \BDI\ case in full, see Appendix \ref{appendix:general_bdi}.
+returning precisely the moments the M-step consumes. 
 
-\subsection{M-step rate and fragment-size estimates; the long-sequence limit}
+%For the general \BDI\ case in full, see Appendix~\ref{appendix:general_bdi}.
+
+\subsection{M-step rates; EM under the long-sequence limit}
 
 Given accumulated $(B,D,S)$ over a corpus, the maximum-likelihood TKF91 indel
 rates are
@@ -421,27 +421,13 @@ rates are
 \hat\ins \;=\; \frac{B}{S+t}, \qquad
 \hat\del \;=\; \frac{D}{S}.
 \end{equation}
-For TKF92 the self-loop counts must first
-be split into fragment-extending ($F$) vs.\ fragment-ending ($E$) contributions via the same
-score-function identity,
-\begin{equation}
-\label{eq:resolve}
-\begin{gathered}
-F_a \;=\; \hat n''_{aa}\,\frac{\ext}{\ext+(1-\ext)\,\tau'_{aa}},\quad
-\hat n_{ab} = \hat n''_{ab}-\delta_{ab}F_a,\\
-F = \sum_a F_a,\quad
-E = \sum_{a,b}\hat n_{ab} - 1,\quad
-\hat\ext \;=\; \frac{F}{F+E},\quad
-\end{gathered}
-\end{equation}
-with the TKF91 statistics $(B,D,S)$ using the resolved link-level counts $\hat n_{ab}$.
 
 In practice, long sequences approach the infinite-sequence limit $\ins{=}\del$.
 Writing $\E[S]$ from the score identities and the conservation law gives
 \begin{equation}
 \label{eq:ES}
 \E[S\mid i,j,t]=\frac{(j-i)+\del\,\partial_\del\log P_{ij}
-  -\ins\,\partial_\ins\log P_{ij}-\ins t}{\ins-\del},
+  -\ins\,\partial_\ins\log P_{ij}-\ins t}{\ins-\del}.
 \end{equation}
 At $\ins{=}\del$, the numerator reduces to $j-i+\E[D]-\E[B]$, which is zero by
 \Cref{eq:conservation}. The resulting $0/0$ is a removable singularity; L'H\^opital gives
@@ -455,7 +441,8 @@ At $\ins{=}\del$, the numerator reduces to $j-i+\E[D]-\E[B]$, which is zero by
 whose first and second log-likelihood derivatives are finite because
 each per-factor derivative $\partial\log\xi/\partial\ins$
 ($\xi\in\{\alpha,\beta,\gamma,\dots\}$) has its own removable
-singularity resolved by L'H\^opital. Equivalently, at exactly equal
+singularity resolved by L'H\^opital (\Cref{tab:score-derivatives-equal}). 
+Equivalently, at exactly equal
 rates, the conditional \BDI\ bridge has the single free parameter $\del$
 and the M-step collapses to
 \begin{equation}
@@ -468,13 +455,13 @@ The infinite-sequence limit is regularly approached in observed sequences.
 The TKF equilibrium length is $\kappa/(1{-}\kappa)$
 residues, so an average $360$-residue protein~\cite{UniProtStatistics}
 would have $\kappa\approx0.997$ under TKF91.
-Under TKF92, $\kappa\approx0.992$ with the $1$--$5$-residue indels typical of proteins~\cite{Cartwright2009,Ajawatanawong2013}.
-Coding DNA have $\kappa\approx0.999$~\cite{XuEtAl2006}.
+%Under TKF92, $\kappa\approx0.992$ with the $1$--$5$-residue indels typical of proteins~\cite{Cartwright2009,Ajawatanawong2013}.
+Coding DNA has $\kappa\approx0.999$~\cite{XuEtAl2006}.
 %In this work, our \Pfam\ [CITE] training data was estimated to have $\kappa\approx0.98$.
 
-For an analysis of the M-step for the innermost-level substitution process, see Appendix \ref{appendix:subst-mstep}.
+For an analysis of the M-step for the innermost-level substitution process, see Appendix~\ref{appendix:subst-mstep}.
 
-\subsection{Closed-form M-step for the stationary joint model}
+\subsection{EM under the joint distribution}
 
 The forms \eqref{eq:mstep} come from the \emph{conditional} distribution
 $P(y\mid x)$, which stays well-defined for every $(\ins,\del)$
@@ -483,32 +470,50 @@ However, for models with latent structure, marginalizing the latent
 variables out of the likelihood is simpler under the stationary 
 \emph{joint} distribution $P(x,y)=P(x)P(y\mid x)$.
 
-% AL: this was originally contained in a footnote attached to \eqref{eq:cond_tkf91}; neurIPS discourages footnotes, and doing that took up more page room...
 The finite-time TKF91 transition probabilities for the joint distribution can be 
 obtained by incorporating the ancestral length parameter, $\kappa=\ins/\del$, 
 into select columns of the conditional distribution's TKF91 transition matrix 
 \eqref{eq:cond_tkf91}. For transitions ending in match, delete, and end:
 $\tau'_{ab} \leftarrow \kappa \tau_{ab}$ for $b\in\{\hst{M},\hst{D}\}$ and $\tau'_{a \hst{E}} \leftarrow (1-\kappa)\tau_{a \hst{E}}$.
 Column $\hst{I}$ is unchanged.
-The jointly-normalized TKF92 transition matrix, $\tau''(\ins,\del,\ext,t)$, has further fragment-extending self loops:
-$\tau''_{ab} \leftarrow (1-\ext)\tau'_{ab} + \ext \delta_{ab}$.
 
-To derive the M-step for the joint distribution (which is the conditional distribution multiplied by the ancestral-length prior), two further sufficient statistics are needed: $L$, the
+The joint distribution for TKF91 includes a prior over the ancestral sequence length. 
+Thus, the M-step update for $\lambda$ and $\mu$ requires two further sufficient statistics: $L$, the
 expected total ancestral length, and $M$, the expected number of
-alignment trajectories. These couple the $(\ins,\del)$ update into a
+alignment trajectories. 
+We can compute $L$ and $M$ directly from the expected transition counts $\hat n_{ab}$ of the pair HMM.
+These couple the $(\ins,\del)$ update into a
 single quadratic in $\kappa=\ins/\del$.
 Writing $T$ for the total branch length and setting
 $a=B+L$, $b=D-L-M$,
 \begin{equation}
-\label{eq:kappa-quadratic}
-\kappa^2 (S+T)\,b \;-\; \kappa\,\bigl(S(a+b+2M)+T(b+M)\bigr) \;+\; S\,a \;=\; 0,
+	\label{eq:kappa-quadratic}
+	\kappa^2 (S+T)\,b \;-\; \kappa\,\bigl(S(a+b+2M)+T(b+M)\bigr) \;+\; S\,a \;=\; 0,
 \end{equation}
 whose admissible root is the one in $(0,1)$;
 $\hat\del=(b+M/(1-\hat\kappa))/S$ and $\hat\ins=\hat\kappa\hat\del$ then
-follow.
+follow. 
 
-We can compute $L$ and $M$ directly from the expected transition counts $\hat n_{ab}$ of the pair HMM.
-When TKF92 is used as a \MixDom\ domain submodel, $M$ is the
+TKF92~\cite{ThorneEtAl92} is a BDI process over \textit{multi-residue fragments}. The jointly-normalized TKF92 transition matrix, $\tau''(\ins,\del,\ext,t)$, has further fragment-extending self loops:
+$\tau''_{ab} \leftarrow (1-\ext)\tau'_{ab} + \ext \delta_{ab}$ for $a,b \in \{ \hst{M}, \hst{I}, \hst{D} \}$.
+
+In the E-step for the jointly-normalized TKF92 pairwise process, forward--backward returns expected transition counts $\hat n''_{ab}$. The process's self-loop counts must then
+be split into fragment-extending ($F$) vs.\ fragment-ending ($E$) contributions via the same
+score-function identity,
+\begin{equation}
+\label{eq:resolve}
+\begin{gathered}
+F_a \;=\; \hat n''_{aa}\,\frac{\ext}{\ext+(1-\ext)\,\tau'_{aa}},\quad
+\hat n_{ab} = \hat n''_{ab}-\delta_{ab}F_a,\quad
+F = \sum_a F_a,\quad
+E = \sum_{a,b}\hat n_{ab} - 1.
+%\hat\ext \;=\; \frac{F}{F+E},\quad
+\end{gathered}
+\end{equation}
+The \BDI\ statistics $(B,D,S)$ now use the resolved link-level counts $\hat n_{ab}$.
+
+The corresponding M-step update for the fragment length parameter is $\hat\ext \;=\; \frac{F}{F+E}$.  
+The M-step update for $\lambda$ and $\mu$ remains the same, except $L$ is the expected number of fragments.  When TKF92 is used as a \MixDom\ domain submodel, $M$ is the
 expected number of times a domain of each type was used, so the
 $(L,M)$~/~$\kappa$-quadratic step of \eqref{eq:kappa-quadratic} fits the
 per-domain indel rates.
@@ -525,8 +530,8 @@ per-domain indel rates.
 \MixFrag\ retains the same \BDI\ process $(\ins,\del)$ and the substitution
 model $(Q,\eqm)$ as TKF92, but replaces the single extension
 parameter $\ext$ with a mixture. When a link is inserted, it independently draws
-a fragtype $f\sim\mathrm{Categorical}(w_1,\dots,w_{\mathcal F})$; each class's
-fragment length is geometric with extension parameter $r_f$.
+a fragtype $f\sim\mathrm{Categorical}(w_1,\dots,w_{\mathcal F})$; each fragtype's 
+length is geometric with fragment-extension probability $r_f$.
 The \BDI\ and substitution processes remain shared across fragtypes,
 and $\mathcal F{=}1$ recovers TKF92 exactly. The resulting pair HMM has
 $3\mathcal F{+}2$ states
@@ -535,7 +540,7 @@ state of type $f$ contributes $(1-r_f)$, entering type $g$ contributes
 $w_g$, and a same-state, same-type self-loop contributes
 $r_f\delta_{fg}$.
 
-Drawing fragtype from a mixture means the type is no longer identifiable 
+Drawing the fragtype from a mixture means the type is no longer identifiable 
 from a fragment's observed length. Forward--backward marginalizes
 over all possible sequences of fragtype labels. Consequently, the per-type
 $F_f,E_f$ statistics needed for EM can no longer be recovered from 
@@ -547,9 +552,9 @@ aggregate adjacent-column transition counts alone.
 When sequence alignments are provided, \MixFrag\ can still be trained by 
 exact EM, but additional summary counts are needed. 
 Each new link draws its fragtype independently, giving the 
-transfer operator the rank-one off-diagonal form $B_{ab}=\tau_{ab}(1-r_f)w_g$. 
-A change in fragtype marks a fragment boundary, and a cherry alignment can be
-partitioned into runs of states of the same type. The per-bin log-likelihood is
+transfer operator the rank-one off-diagonal form $B_{ab}=\tau_{ab}(1-r_f)w_g$ (where $a,b \in \{ \hst{S}, \hst{M}, \hst{I}, \hst{D}, \hst{E} \}$ and $f,g$ are fragtypes). 
+A change in fragtype marks a fragment boundary, and a cherry alignment (i.e. a pairwise alignment between closest siblings in the phylogenetic tree) can be
+partitioned into runs of states of the same type. After quantizing time into \textit{bins}~\cite{Prillo2022CherryML}, the per-bin log-likelihood is
 computed by constrained dynamic programming over the segments.
 
 The E-step is again the score-function identity applied by
@@ -564,8 +569,12 @@ In the M-step, the following closed-form updates are applied:
 \hat w_f=\frac{E_f}{\sum_{f'}E_{f'}},\qquad
 (\hat\ins,\hat\del)\ \text{from \Cref{eq:kappa-quadratic}} .
 \end{equation}
-Each iteration costs $O(\sum_\tau(\mathcal F\,k_{\max}+i_{\max}j_{\max}))$, \emph{independent
-of the number of cherries}. The factorized indel log-likelihood agrees with brute-force computation to within $1\mathrm{e}{-9}$. On simulated corpora, exact EM can recover true parameters.
+% changed time bin variable: \tau -> t'
+Each iteration costs $O(\sum_{t'}(\mathcal F\,k_{\max}+i_{\max}j_{\max}))$, where $k_{\max}$ is 
+the longest match run and $(i_{\max},j_{\max})$ the largest deletion and insertion totals in any 
+single gap. This cost is \emph{independent of the number of cherries}. The factorized indel 
+log-likelihood agrees with brute-force computation to within $1\mathrm{e}{-9}$. On simulated 
+corpora, exact EM can recover true parameters.
 
 \subsection{Stochastic variational Baum--Welch (\svibw)}
 \label{sec:svibw}
@@ -576,7 +585,7 @@ accumulate fragtype-summed link counts and per-type statistics $(F_f,E_f)$ (E-st
 then applies the closed-form updates in \Cref{eq:mixfrag-mstep} (M-step). We run a decreasing step-size schedule ($\eta_k\propto 1/(k{+}2)$) and aggregate parameter iterates with Polyak--Ruppert averaging.
 On simulated corpora, \svibw\ recovers the true $\ins/\del$ to within $\approx$20\%.
 
-See Appendix \ref{appendix:svibw_appendix} for an analysis of aggregation methods and parameter estimate precision.
+See Appendix~\ref{appendix:svibw_appendix} for an analysis of aggregation methods and parameter estimate precision.
 
 % =============================================================
 \section{MixDom: null-path collapse and an autodiff E-step}
@@ -612,7 +621,7 @@ for an inserted or deleted domain and
 $\sum_d\rho_d\,\tau_{\hst{S}\hst{E}}(\ins_d,\del_d,t)$ for a match domain.
 These terms are factored into the transition matrix of the exploded machine.
 Transitions into the $\varnothing$ states carry the probability of the domain being empty, while transitions into the emitting states are rescaled by the probability of the domain being non-empty
-(see \Cref{appendix:exploded-mixdom}).
+(see Appendix~\ref{appendix:exploded-mixdom}).
 
 Let $\bm{T}^{\rm exp}_{\Phi_1,\Phi_2}$ denote the submatrix of
 $\bm{T}^{\rm exp}$ on source rows $\Phi_1$ and destination columns
@@ -637,14 +646,14 @@ transition matrix
 where $\bar\varnothing=\{\hst{S},\hst{M},\hst{I},\hst{D},\hst{E}\}$.
 Nesting $\Aeff$ inside the domain
 weights $(\rho_d,\kappa_d,w_{df},r_{df})$ produces the final collapsed
-pair HMM $\bm{T}^{\rm nest}$, which has $5NK{+}2$ states (five emitting
-top-level state-types $\times$ $N$ domain types $\times$ $K$ fragtypes,
+pair HMM $\bm{T}^{\rm nest}$, which has $5N \mathcal F {+}2$ states (five emitting
+top-level state-types $\times$ $N$ domain types $\times$ $\mathcal F$ fragtypes,
 plus $\hst{S}$ and $\hst{E}$).
 
 \subsection{Sufficient statistics by automatic differentiation through \texorpdfstring{$\Zsum$}{Z}}
 
 The exact rate-space sufficient statistics can be obtained directly. Forward--backward on $\bm{T}^{\rm nest}$
-returns collapsed-state expected counts $\hat n''_{ij}$. The
+returns collapsed-state expected counts $\hat n^{\rm nest}_{ij}$. The
 score-function identity in its collapsed form,
 \begin{equation}
 \label{eq:mixdom-score}
@@ -661,7 +670,7 @@ $\vartheta\in\{\rho_d,\kappa_d,w_{df},r_{df},\ins_d,\del_d,\dots\}$,
 \begin{equation}
 \label{eq:mixdom-chain}
 \hat n_\vartheta
- \;=\; \sum_{i,j}\hat n''_{ij}
+ \;=\; \sum_{i,j} \hat n^{\rm nest}_{ij}
    \sum_{k,l}\frac{\partial\log \bm{T}^{\rm nest}_{ij}}
                   {\partial\log \Aeff_{kl}}
    \sum_{a,b}\frac{\partial\log \Aeff_{kl}}
@@ -677,18 +686,17 @@ differentiation of $\log\Zsum$ computes.
 Autodiff recovers all per-domain and per-fragtype \BDI\ statistics needed
 for the closed-form M-steps of \Cref{sec:tkfem,sec:svibw}. 
 The autodiff and explicit chain-rule calculations agree to machine precision.
-Inference runs on the smaller $5NK{+}2$-state
+Inference runs on the smaller $5N \mathcal F {+}2$-state
 machine while the M-step stays exact in the rate space of the original
 nested process.
 
 \subsection{Sufficient statistics and natural parameter derivatives}
 
 As noted above, the sufficient statistics are directly related
-to the log-likelihood gradient. Consequently, as an alternative to EM, they can be used directly in a custom vector-Jacobian product;
-for example in an efficient natural-gradient optimizer.
+to the log-likelihood gradient. Consequently, as an alternative to EM, they can be used directly in a custom vector-Jacobian product (for example in an efficient natural-gradient optimizer).
 This amounts to a hand-coded autodiff.
 
-We compared the closed-form M-step to Adam-based natural-gradient optimization, and observed
+We compared the closed-form M-step to Adam-based gradient optimization, and observed
 that closed-form EM converges robustly in orders of magnitude fewer iterations.
 
 % =============================================================
@@ -700,14 +708,14 @@ The expected \BDI\ sufficient statistics $\E[B]$, $\E[D]$, and $\E[S]$
 can exceed the corresponding parsimonious estimates for two reasons.
 First, an alignment records the outcomes of surviving indels but not their times. 
 Second, \emph{ghost} residues can be inserted and deleted within the same branch, 
-leaving no trace at either endpoint. We address both of these phenomena by making the trajectory time-explicit. The \emph{gravestone augmentation} dates estimates a 
+leaving no trace at either endpoint. We address both of these phenomena by making the trajectory time-explicit. The \emph{gravestone augmentation} estimates a 
 birth time for each inserted residue, a death time for each deleted one, 
 and both times for each ghost.
 
 
 \subsection{A time-indexed gravestone-augmented pair SCFG}
-
-Under TKF91, each link has lifetime $\tau\sim\mathrm{Exp}(\del)$ and spawns child
+% renamed lifetime: \tau -> \ell
+Under TKF91, each link has lifetime $\ell\sim\mathrm{Exp}(\del)$ and spawns child
 links at rate $\ins$ during its lifetime (illustrated in \Cref{fig:tkf-trajectory}). The branching structure is a
 continuous-time Galton--Watson process~\cite{Metzler2003} expressible as
 a time-indexed grammar,
@@ -716,18 +724,18 @@ a time-indexed grammar,
 \begin{aligned}
 L(t) &\to A \cdot D(t,t)
         && \text{weight } e^{-\del t}, &
-L(t) &\to G_\tau \cdot D(t,\tau)
-        && \text{density } \del\, e^{-\del\tau}\,d\tau,\\
+L(t) &\to G_\ell \cdot D(t,\ell)
+        && \text{density } \del\, e^{-\del\ell}\,d\ell,\\
 D(t,T) &\to L(t-u) \cdot D(t,T)
         && \text{density } \ins\, du, &
 D(t,T) &\to \epsilon
         && \text{weight } e^{-\ins T}.
 \end{aligned}
 \end{equation}
-Here $A$ is a residue that survives to the endpoint and $G_\tau$ is a
-ghost residue with lifetime $\tau$. $D(t,T)$ generates the
+Here $A$ is a residue that survives to the endpoint and $G_\ell$ is a
+ghost residue with lifetime $\ell$. $D(t,T)$ generates the
 child links born during a window of size $T$ inside an interval of size
-$t$. The pair version adds an ancestor strand to the left of each $A$/$G_\tau$ terminal.
+$t$. The pair version adds an ancestor strand to the left of each $A$/$G_\ell$ terminal.
 Under TKF92, a terminal is a fragment of geometric length, and all fragment
 residues share birth and death times.
 Earlier pair-SCFG 
@@ -743,7 +751,7 @@ extends to trees without modification.
 process and its gravestone-augmented SCFG parse tree.}
 \textit{Top:} the gravestone-augmented SCFG parse tree of
 \eqref{eq:gw-scfg} with $(t,T)$ annotations; each leaf terminal
-($A$ for an alive residue, $G_\tau$ for a ghost) sits directly
+($A$ for an alive residue, $G_\ell$ for a ghost) sits directly
 above its trajectory column. \textit{Bottom:} one realization of the continuous-time TKF91 process on
 a branch of length $T$; columns are residue lineages, $\circ$ = birth,
 $\bullet$ = survival to the endpoint, $\times$ = death; ghost
@@ -754,7 +762,7 @@ so leaving no trace at the endpoints.}
 
 The Inside matrix for this grammar can be computed using a generating function approach.
 The posterior over trajectories, conditioned on a given alignment, can then be sampled
-by stochastic traceback of a parse tree, as described in Appendix \ref{appendix:sampling_scfg}.
+by stochastic traceback of a parse tree, as described in Appendix~\ref{appendix:sampling_scfg}.
 
 % =============================================================
 \section{Results: \Pfam\ fits and BAliBASE accuracies}
@@ -764,22 +772,24 @@ by stochastic traceback of a parse tree, as described in Appendix \ref{appendix:
 We fit TKF92 (\MixFrag, $\mathcal F{=}1$) and \MixFrag\ $\mathcal F{=}2$ by
 exact summarized-count EM (\Cref{sec:cherryem}), and \MixDom-d3f1 by \svibw\
 (\Cref{sec:svibw}), on a common \Pfam\ dataset.
+We present two simpler mixtures as comparison points: CherryML-$C{=}20$, a 20-component mixture of substitution models (with one TKF92 indel model); and TKF92-$K{=}20$, a 20-component mixture of standard TKF92 indel models.
+Both are also fit with exact summarized-count EM.
+For all models, we use LG08 as our substitution model, with $(Q,\eqm)$ fixed to values from~\citet{LG08}.
 The training split contains 20{,}897 families and
-1{,}134{,}482 cherries; the held-out validation split contains 2{,}293 families and 116{,}640 pairs.
-We use LG08 as our substitution model, with $(Q,\eqm)$ fixed to values from~\citet{LG08}.
-\Cref{tab:pfam} reporst the validation likelihood scored by two methods:
-\emph{path-conditioned} (1D Forward along the alignment) and
-\emph{order-summed} (2D Forward, matches fixed but indel orderings summed).
+1{,}134{,}482 cherries.
+The held-out validation split contains 2{,}293 families and 116{,}640 pairs.
+\Cref{tab:pfam} reports the validation likelihood scored by two methods:
+\emph{path-conditioned} (sum along the alignment) and
+\emph{order-summed} (2D Forward; matches fixed but indel orderings summed).
 
 \begin{table}[t]
 \caption{Held-out per-pair log-likelihood
 (nats) on the \Pfam\ validation split (116{,}640 pairs / 2{,}293
 families); models trained as per \Cref{sec:results}. 
-Path-conditioning scoring fixes the order of insertions and deletions within each gap. Order-summed scoring sums over all possible orderings. 
-Fragtypes and domain types are marginalized in both.}
+ Path-conditioned scoring fixes the order of insertions and deletions within each gap. Order-summed scoring sums over all possible orderings. }
 \label{tab:pfam}
 \centering
-\footnotesize
+%\footnotesize
 \setlength{\tabcolsep}{5pt}
 \begin{tabular}{@{}lcc@{}}
 \toprule
@@ -796,10 +806,10 @@ TKF92 ($\mathcal F{=}1$) & $-726.30$ & $-721.97$ \\
 %$\kappa\approx0.98$, essentially the same birth--death process, so the
 %mixture acts on fragment geometry not the indel rate:
 \MixFrag\ splits
-TKF92's single retention $r{=}0.677$ into a short mode ($r{\approx}0.375$,
+TKF92's single fragment-extension probability $r{=}0.677$ into a short mode ($r{\approx}0.375$,
 weight $0.63$) and a long mode ($r{\approx}0.833$, weight $0.37$). 
 The order-summed score exceeds the path-conditioned one for every model, by 4.3 nats/pair for TKF92 and 6.4 for \MixFrag.
-\MixFrag\ is close to TKF92 when fitting Pfam alignments as given (i.e. path-conditioned), but outperforms TKF92 when fitting unaligned Pfam sequences (i.e. order-summed).
+\MixFrag\ is close to TKF92 when fitting \Pfam\ alignments as given (i.e. path-conditioned), but outperforms TKF92 when fitting unaligned \Pfam\ sequences (i.e. order-summed).
 
 \subsection{Downstream alignment on BAliBASE}
 
@@ -812,7 +822,7 @@ all accuracy metrics.
  %($F_1$ $0.387$ vs.\ $0.377$, SP $0.812$ vs.\ $0.776$, TC $0.677$ vs.\ $0.622$);
 A $K{=}20$ mixture of TKF92 models and the
 20-class site mixture (CherryML-$C{=}20$) also edge out standard TKF92. 
-All models were trained with counts-based exact EM except for \MixDom\, which used \svibw.
+All models were trained with counts-based exact EM except for \MixDom, which used \svibw.
 
 \begin{table}[t]
 \caption{Full-length BAliBASE
@@ -822,7 +832,7 @@ $F_1$, sum-of-pairs (SP) and total-column (TC). Top block: this paper's
 trained models; bottom block: MAFFT and MUSCLE~\cite{Katoh2013,Edgar2004}.}
 \label{tab:balibase}
 \centering
-\footnotesize
+%\footnotesize
 \setlength{\tabcolsep}{5pt}
 \begin{tabular}{@{}lccc@{}}
 \toprule
@@ -849,7 +859,7 @@ TKF-family models are exponential families with additive sufficient
 statistics, so their M-steps are closed-form.
 We have shown how to recover the relevant E-statistics via the score function identity;
 the technique amounts, straightforwardly, to automatic differentiation of the Forward likelihood.
-This directly supports approaches that augment the TKF models; whether by introducing latent structure,
+This directly supports approaches that augment the TKF models, whether by introducing latent structure
 or by making the indel rates functions of the data~\cite{LargeHolmes2026}.
 
 % Do NOT include this section in the anonymized submission, only in the final paper. You can use the \texttt{ack} environment provided in the style file to automatically hide this section in the anonymized submission.
@@ -871,8 +881,87 @@ or by making the indel rates functions of the data~\cite{LargeHolmes2026}.
 \newpage
 \appendix
 
-\section{Transition probability for general BDI}
-\label{appendix:general_bdi}
+%%% There were a lot of issues raised here, so removing for now
+%\section{Transition probability for general BDI}
+%\label{appendix:general_bdi}
+%\newcommand\expect{\mathbb{E}}
+%\newcommand\xpath{\mathbb{X}}
+%\newcommand\insrate{\lambda}
+%\newcommand\delrate{\mu}
+%\newcommand\immrate{\nu}
+%\newcommand{\ind}{\mathrm{ind}}
+%\newcommand{\imm}{\mathrm{imm}}
+
+%For the general linear BDI process with per-capita birth rate $\insrate$,
+%per-capita death rate $\delrate$, and constant immigration rate $\immrate$
+%(where $\immrate$ is a free parameter, not necessarily $0$ or $\insrate$),
+%the transition probability $P_{ij}(T) = P(X(T) = j \mid X(0) = i)$ is known in closed form
+%\cite{Kendall1948}.
+
+%Using the $\alpha$ and $\beta$ from \eqref{eq:abg},
+%define $\rho = \immrate / \insrate$ (the immigration-to-birth ratio).
+%The transition probability factorizes as:
+%\begin{equation}\label{eq:pij-general}
+%P_{ij}(T) = \underbrace{P_{ij}^{(0)}(T)}_{\text{no-immigration}} \cdot
+%\underbrace{R_{ij}(T)}_{\text{immigration factor}}
+%\end{equation}
+%The no-immigration factor is
+%\begin{equation}\label{eq:pij-noimm}
+%P_{ij}^{(0)}(T) = \sum_{k=0}^{\min(i,j)} \binom{i}{k} \binom{j-1}{k-1}
+ % \alpha^k (1-\alpha)^{i-k} (1-\gamma)^{i-k}
+ % \gamma^{j-k} (1-\beta)^{k+1} \beta^{j-k-1} \cdot \delta_{j>0}
+%\end{equation}
+%(with the $k=0$ term understood as $(1-\alpha)^i (1-\gamma)^i$ when $j=0$,
+%and the convention $\binom{-1}{-1} = 1$).
+
+%For the immigration factor,
+%when $\immrate \neq \insrate$ (i.e.\ $\rho \neq 1$):
+%\begin{equation}\label{eq:imm-factor}
+%R_{ij}(T) = (1-\beta)^{\rho} \cdot
+%{}_2F_1\!\left(-j, \rho;\, 1;\, \frac{\beta}{1-\beta} \cdot \frac{1}{\beta/(1-\beta)}\right)
+%\end{equation} % AL: Don't these cancel, so it's just 1?
+%More explicitly, the full $P_{ij}(T)$ with immigration can be written
+%using the negative binomial form \cite{Kendall1948}:
+%\begin{equation}\label{eq:pij-full}
+%P_{ij}(T) = \sum_{k=0}^{\min(i,j)}
+% \binom{i}{k}\binom{j-1}{k-1}
+%  \alpha^k (1-\alpha-\gamma+\alpha\gamma)^{i-k}
+%  \gamma^{j-k}(1-\beta)^{k+1}\beta^{j-k-1}
+%  \cdot (1-\beta)^{\rho}
+%  \sum_{m=0}^{j-k} \binom{\rho+m-1}{m}\beta^m
+%\end{equation}
+%where the inner sum is a truncated negative binomial in $\beta$ with parameter $\rho$.
+%When $\rho = 1$ (i.e.\ $\immrate = \insrate$),
+%the immigration factor simplifies to a factor of $(1-\beta)$, recovering the TKF91 transition probabilities.
+%When $\rho = 0$ (no immigration), $R = 1$ and we recover $P_{ij}^{(0)}$.
+
+%\subsection{\texorpdfstring{Score derivatives for $\immrate$}{Score derivatives for nu}}
+
+%The score with respect to $\immrate$ is
+%\[
+%\frac{\partial}{\partial\immrate}\log P_{ij}
+%= \frac{1}{P_{ij}} \frac{\partial P_{ij}}{\partial\immrate}
+%\]
+%Since $\immrate$ enters through $\rho = \immrate/\insrate$ and the factor $(1-\beta)^\rho$
+%times the negative binomial sum, we have
+%\begin{equation}
+%\frac{\partial}{\partial\immrate}\log P_{ij}
+%= \frac{1}{\insrate}\left(
+%\log(1-\beta) + \psi(\rho) \cdot [\text{correction from the sum}]
+%\right)
+%\end{equation}
+%where $\psi$ is the digamma function (arising from $\partial/\partial\rho\;\binom{\rho+m-1}{m}$).
+%The full expression is:
+%\begin{equation}\label{eq:dlogP-dnu}
+%\frac{\partial}{\partial\immrate}\log P_{ij} = \frac{1}{\insrate}
+%  \frac{\sum_k (\cdots) \sum_m \binom{\rho+m-1}{m}\beta^m
+%  \left[\log(1-\beta) + \sum_{\ell=0}^{m-1}\frac{1}{\rho+\ell}\right]}
+%  {\sum_k (\cdots) \sum_m \binom{\rho+m-1}{m}\beta^m}
+%\end{equation}
+%where $(\cdots)$ abbreviates the terms from the outer sum in~(\ref{eq:pij-full}).
+
+\section{The substitution model M-step}
+
 \newcommand\expect{\mathbb{E}}
 \newcommand\xpath{\mathbb{X}}
 \newcommand\insrate{\lambda}
@@ -881,81 +970,12 @@ or by making the indel rates functions of the data~\cite{LargeHolmes2026}.
 \newcommand{\ind}{\mathrm{ind}}
 \newcommand{\imm}{\mathrm{imm}}
 
-For the general linear BDI process with per-capita birth rate $\insrate$,
-per-capita death rate $\delrate$, and constant immigration rate $\immrate$
-(where $\immrate$ is a free parameter, not necessarily $0$ or $\insrate$),
-the transition probability $P_{ij}(T) = P(X(T) = j \mid X(0) = i)$ is known in closed form
-\cite{Kendall1948}.
-
-Using the $\alpha$ and $\beta$ from \eqref{eq:abg},
-define $\rho = \immrate / \insrate$ (the immigration-to-birth ratio).
-The transition probability factorizes as:
-\begin{equation}\label{eq:pij-general}
-P_{ij}(T) = \underbrace{P_{ij}^{(0)}(T)}_{\text{no-immigration}} \cdot
-\underbrace{R_{ij}(T)}_{\text{immigration factor}}
-\end{equation}
-The no-immigration factor is
-\begin{equation}\label{eq:pij-noimm}
-P_{ij}^{(0)}(T) = \sum_{k=0}^{\min(i,j)} \binom{i}{k} \binom{j-1}{k-1}
-  \alpha^k (1-\alpha)^{i-k} (1-\gamma)^{i-k}
-  \gamma^{j-k} (1-\beta)^{k+1} \beta^{j-k-1} \cdot \delta_{j>0}
-\end{equation}
-(with the $k=0$ term understood as $(1-\alpha)^i (1-\gamma)^i$ when $j=0$,
-and the convention $\binom{-1}{-1} = 1$).
-
-For the immigration factor,
-when $\immrate \neq \insrate$ (i.e.\ $\rho \neq 1$):
-\begin{equation}\label{eq:imm-factor}
-R_{ij}(T) = (1-\beta)^{\rho} \cdot
-{}_2F_1\!\left(-j, \rho;\, 1;\, \frac{\beta}{1-\beta} \cdot \frac{1}{\beta/(1-\beta)}\right)
-\end{equation} % AL: Don't these cancel, so it's just 1?
-More explicitly, the full $P_{ij}(T)$ with immigration can be written
-using the negative binomial form \cite{Kendall1948}:
-\begin{equation}\label{eq:pij-full}
-P_{ij}(T) = \sum_{k=0}^{\min(i,j)}
-  \binom{i}{k}\binom{j-1}{k-1}
-  \alpha^k (1-\alpha-\gamma+\alpha\gamma)^{i-k}
-  \gamma^{j-k}(1-\beta)^{k+1}\beta^{j-k-1}
-  \cdot (1-\beta)^{\rho}
-  \sum_{m=0}^{j-k} \binom{\rho+m-1}{m}\beta^m
-\end{equation}
-where the inner sum is a truncated negative binomial in $\beta$ with parameter $\rho$.
-When $\rho = 1$ (i.e.\ $\immrate = \insrate$),
-the immigration factor simplifies to a factor of $(1-\beta)$, recovering the TKF91 transition probabilities.
-When $\rho = 0$ (no immigration), $R = 1$ and we recover $P_{ij}^{(0)}$.
-
-\subsection{\texorpdfstring{Score derivatives for $\immrate$}{Score derivatives for nu}}
-
-The score with respect to $\immrate$ is
-\[
-\frac{\partial}{\partial\immrate}\log P_{ij}
-= \frac{1}{P_{ij}} \frac{\partial P_{ij}}{\partial\immrate}
-\]
-Since $\immrate$ enters through $\rho = \immrate/\insrate$ and the factor $(1-\beta)^\rho$
-times the negative binomial sum, we have
-\begin{equation}
-\frac{\partial}{\partial\immrate}\log P_{ij}
-= \frac{1}{\insrate}\left(
-  \log(1-\beta) + \psi(\rho) \cdot [\text{correction from the sum}]
-\right)
-\end{equation}
-where $\psi$ is the digamma function (arising from $\partial/\partial\rho\;\binom{\rho+m-1}{m}$).
-The full expression is:
-\begin{equation}\label{eq:dlogP-dnu}
-\frac{\partial}{\partial\immrate}\log P_{ij} = \frac{1}{\insrate}
-  \frac{\sum_k (\cdots) \sum_m \binom{\rho+m-1}{m}\beta^m
-  \left[\log(1-\beta) + \sum_{\ell=0}^{m-1}\frac{1}{\rho+\ell}\right]}
-  {\sum_k (\cdots) \sum_m \binom{\rho+m-1}{m}\beta^m}
-\end{equation}
-where $(\cdots)$ abbreviates the terms from the outer sum in~(\ref{eq:pij-full}).
-
-\section{The substitution model M-step.}
 \label{appendix:subst-mstep}
 The closed-form M-step is a property of the indel process; the substitution side is more nuanced.
 Some substitution models do have closed-form MLEs
 from the expected transition counts and dwell
 times~\cite{HolmesRubin2002,HobolthJensen2005,HobolthJensen2011};
-these include unconstrained (irreversible) models, and reversible models whose parameters decouple from the
+these include unconstrained (irreversible) models and reversible models whose parameters decouple from the
 reversibility constraint (F81, JC69, K80, HKY). Write
 $U_{ij}$ for the expected number of $i{\to}j$ substitutions and $W_i$ for
 the expected dwell time in state $i$ (the endpoint-conditioned CTMC
@@ -972,10 +992,9 @@ exchangeabilities to the equilibrium: a suitable approach is to alternate the
 $\theta$-update with recomputing $\pi$. Those expectations also depend on
 when indels fell on a branch, requiring genealogical corrections whose
 exact treatment via the gravestone construction of \Cref{sec:gravestone}
-we leave open; we assume the perturbation is negligible. The general
-\BDI\ case and these substitution M-steps are derived in the supplement.
+we leave open; we assume the perturbation is negligible. 
 
-\section{\svibw implementation analyses}
+\section{\svibw\ implementation analyses}
 \label{appendix:svibw_appendix}
 
 \subsection{How much data? Effective sample size is counted in pairs}
@@ -1096,10 +1115,10 @@ $\mathrm{diag}(1/\alpha_i)$ predicts.
 \newcommand\ystate{{\tt Y}}
 
 % ---- content ----
-\section{Exploded MixDom Pair HMM}
+\section{Exploded MixDom pair HMM}
 \label{appendix:exploded-mixdom}
 
-\subsection{State Space}
+\subsection{State space}
 
 The exploded MixDom Pair HMM makes every structural decision explicit
 as a separate state transition. Let $\ndom$ denote the number of domain
@@ -1112,34 +1131,34 @@ The states are shown in Table~\ref{tab:exploded-state-space}.
 \centering
 \caption{Exploded MixDom Pair HMM state space.}
 \label{tab:exploded-state-space}
-\begin{tabular}{>{\raggedright\arraybackslash}p{0.50\linewidth} >{\raggedright\arraybackslash}p{0.45\linewidth} >{\raggedleft\arraybackslash}p{0.05\linewidth}}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.35\linewidth} >{\raggedright\arraybackslash}p{0.45\linewidth} >{\raggedleft\arraybackslash}p{0.10\linewidth}}
 \hline
 \textbf{Category} & \textbf{States} & \textbf{Count} \\
 \hline
 \textbf{Start/End}
 & $\sta$, $\fin$ & $2$ \\
 
-\textbf{Domain-level} (top-level TKF91 states)
+\makecell[l]{\textbf{Domain-level}\\(top-level TKF91 states)}
 & $\matdom$, $\insdom$, $\deldom$, $\matdomend$, $\insdomend$, $\deldomend$ & $6$ \\
 
-\textbf{Domain type selection} (one per domain type $d$)
+\makecell[l]{\textbf{Domain type selection}\\(one per domain type $d$)}
 & $\matdomtype{d}$, $\insdomtype{d}$, $\deldomtype{d}$ & $3\ndom$ \\
 
-\textbf{Fragment-level} (inner TKF states within $\matdomtype{d}$)
+\makecell[l]{\textbf{Fragment-level}\\(inner TKF states\\within $\matdomtype{d}$)}
 & $\mkfrag{d}$, $\mkifrag{d}$, $\mkdfrag{d}$ & $3\ndom$ \\
 
-\textbf{Fragment-level} (single looping state within $\insdomtype{d}$, $\deldomtype{d}$)
+\makecell[l]{\textbf{Fragment-level}\\(single looping state within\\$\insdomtype{d}$, $\deldomtype{d}$)}
 & $\ikfrag{d}$, $\dkfrag{d}$ & $2\ndom$ \\
 
-\textbf{Fragment type selection} (weight-one, single fragment type)
+\makecell[l]{\textbf{Fragment type selection}\\(weight-one, single fragment type)}
 & $\mkfragtype{d}$, $\mkifragtype{d}$, $\mkdfragtype{d}$,
   $\ikfragtype{d}$, $\dkfragtype{d}$ & $5\ndom$ \\
 
-\textbf{Emit states} (the only emitting states)
+\makecell[l]{\textbf{Emit states}\\(the only emitting states)}
 & $\mkfragemit{d}$, $\mkifragemit{d}$, $\mkdfragemit{d}$,
   $\ikfragemit{d}$, $\dkfragemit{d}$ & $5\ndom$ \\
 
-\textbf{Fragment end} (fragment termination)
+\makecell[l]{\textbf{Fragment end}\\(fragment termination)}
 & $\mkfragend{d}$, $\mkifragend{d}$, $\mkdfragend{d}$,
   $\ikfragend{d}$, $\dkfragend{d}$ & $5\ndom$ \\
 \hline
@@ -1153,7 +1172,7 @@ $\mkfragemit{d} = \matmat_d$, $\mkifragemit{d} = \matins_d$,
 $\mkdfragemit{d} = \matdel_d$, $\ikfragemit{d} = \insins_d$,
 $\dkfragemit{d} = \deldel_d$.
 
-\subsection{Transition Weights}
+\subsection{Transition weights}
 
 All transitions are between non-emitting states, or from non-emitting to
 emitting, or from emitting to non-emitting (Mealy machine: emissions occur
@@ -1201,7 +1220,7 @@ playing the roles of $\sta/\mat/\insstate/\delstate/\fin$:
 \subsubsection{Domain-to-fragment entry (M-type domains)}
 
 Within $\matdomtype{d}$, the fragment-level TKF91 begins.
-Again, this follows the TKF91 Pair HMM structure, now with $\mkfrag{d}/\mkifrag{d}/\mkdfrag{d}\matdomend$ (for incoming connections) and $\matdomtype{d}/\mkfragend{d}/\mkifragend{d}/\mkdfragend{d}$ states (for outgoing connections)
+Again, this follows the TKF91 Pair HMM structure, now with $\mkfrag{d}/\mkifrag{d}/\mkdfrag{d}/\matdomend$ (for incoming connections) and $\matdomtype{d}/\mkfragend{d}/\mkifragend{d}/\mkdfragend{d}$ states (for outgoing connections)
 playing the roles of $\sta/\mat/\insstate/\delstate/\fin$:
 \begin{align}
 \matdomtype{d} &\to \mkfrag{d}: \quad \tkftrans_{\sta\mat}(\insrate_d,\delrate_d,\evoltime) \\
@@ -1292,7 +1311,7 @@ which the next position is emitted:
 Fragment lengths within domain $d$ are therefore geometric with parameter
 $\ext_d$, as in TKF92.
 
-\subsection{Null State Classification}
+\subsection{Null state classification}
 
 Every state except $\sta$, $\fin$, and the five emit states
 $\mkfragemit{d}$, $\mkifragemit{d}$, $\mkdfragemit{d}$,
@@ -1300,7 +1319,7 @@ $\ikfragemit{d}$, $\dkfragemit{d}$ is a \textbf{null state}
 (non-emitting). The collapsed model retains only $\sta$, $\fin$, and
 the $5\ndom$ emit states.
 
-\subsection{Null Elimination}
+\subsection{Null elimination}
 
 The null states are eliminated by the standard HMM null closure:
 \[
@@ -1329,14 +1348,14 @@ corresponding to the following path segments
   \item $\nonemptytrans_{\ustate\vstate}(\ustate,\vstate)$ represents the sum over all paths from the domain end state (or $\sta$), through zero or more empty domains, to the next (nonempty) domain start (or $\fin$), e.g. $\nonemptytrans_{\mat\delstate}(\mat,\delstate)$ represents paths like $\matdomend \to (\ldots \insdom \to \insdomtype{d''} \to \insdomend \ldots )^\ast \to \deldom$. This is where null cycle elimination happens;
   \item $\domenter(\vstate,\ystate,\destdom)$ represents paths from the domain start state to an emit state inside the domain, e.g. $\tkftrans_{\sta\mat}(\mat,\insstate,\destdom)$ represents $\matdom \to \matdomtype{\destdom} \to \mkifrag{\destdom} \to \mkifragtype{\destdom}$;
   \item $p_\text{SameDom}(\xstate,\ystate,\srcdom)$ represents paths from the emit state to another emit state of similar profile but (potentially) different fragment type within the same domain, e.g. $p_\text{SameDom}(\mat,\insstate,\srcdom)$ represents $\mkifragemit{\srcdom} \to \matdomend \to \matdom \to \matdomtype{\srcdom} \to \mkifrag{\srcdom} \to \mkifragtype{\srcdom}$;
-  \item $p_\text{SameFrag}(\srcdom) = \ext_{\srcdom}$ represents intra-fragment Markov transitions between fragment-types (extending the current fragment by one position), e.g.\ $\mkfragemit{\srcdom} \to \mkfragtype{\srcdom}$ with weight $\ext_{\srcdom}$. Different fragments are independent.
+  \item $p_\text{SameFrag}(\srcdom) = \ext_{\srcdom}$ represents intra-fragment Markov transitions between fragment-types (extending the current fragment by one position). In this work, we restrict all fragment extensions to be between the same fragment type.
 \end{itemize}
 
 \section{Gravestone-augmented pair SCFG: sampling latent histories conditioned on observed alignments}
 \label{appendix:sampling_scfg}
-
+ 
 \subsection{Closing the sum: a bivariate generating function}
-
+% changed variable name for "lifetime": tau -> ell
 Sampling from this grammar requires the Inside weights, and these close
 in a bivariate generating function of the alive and ghost counts.
 Let $N_a(t)$, $N_g(t)$ be the numbers of alive and ghost lineages
@@ -1345,11 +1364,11 @@ The Volterra fixed point
 \begin{equation}
 \label{eq:volterra}
 f_t(z,w) = z\,e^{-\del t}\,\exp\!\Bigl(\ins\!\!\int_0^{t}\!\! (f_s - 1)\, ds\Bigr)
-  + w\!\!\int_0^{t}\!\!\del e^{-\del\tau}\,\exp\!\Bigl(\ins\!\!\int_{t-\tau}^{t}\!\! (f_s - 1)\, ds\Bigr)\,d\tau
+  + w\!\!\int_0^{t}\!\!\del e^{-\del\ell}\,\exp\!\Bigl(\ins\!\!\int_{t-\ell}^{t}\!\! (f_s - 1)\, ds\Bigr)\,d\ell
 \end{equation}
 is the Inside recursion of \eqref{eq:gw-scfg} in the $(z,w)$ domain: the
 first term is the $A$ production (a surviving founder, contributing $z$),
-the second the $G_\tau$ production (a ghost, contributing $w$)
+the second the $G_\ell$ production (a ghost, contributing $w$)
 integrated over its death time. It is equivalent to the forward equation
 \begin{equation}
 \label{eq:riccati}
@@ -1372,7 +1391,7 @@ alone, while the marginal in $w$ is the ghost-count distribution
 whose mean is the ghost mass named above.
 
 \subsection{Drawing the history}
-
+% changed variable name for "lifetime": tau -> ell
 \Cref{eq:riccati-flow} gives closed-form per-branch transition kernels
 in $(N_a,N_g)$ that compose across a tree: the count marginal at each
 internal node is a closed-form pointwise distribution computable in
@@ -1380,17 +1399,10 @@ $O(1)$, so a Felsenstein-style upwards--downwards pass yields a
 tree-level closed-form sampler, a \emph{phylogenetic} SCFG of the same
 time-indexed form. To draw a history, one samples $(N_a,N_g)$ from the
 closed-form midpoint marginal, then unrolls \eqref{eq:gw-scfg} top-down:
-each sampled ghost $G_\tau$ is instantiated with its birth--death
-time $\tau$ and, recursively, its own buried sublineage. The result is a
+each sampled ghost $G_\ell$ is instantiated with its birth--death
+time $\ell$ and, recursively, its own buried sublineage. The result is a
 complete latent indel history whose alive residues match the observed
 alignment and whose ghosts are imputed from their exact posterior.
-
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-\newpage
-\input{checklist.tex}
 
 \end{document}
 

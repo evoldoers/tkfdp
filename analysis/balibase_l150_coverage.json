@@ -1,0 +1,109 @@
+{
+  "_comment": "Canonical expected coverage for the BAliBASE bali3pdbm L<150 evaluation used by paper 3 (tab:aln). Do not edit to make a short run pass -- a mismatch means the run is incomplete.",
+  "benchmark": "bali3pdbm",
+  "filter": "all sequences in the family shorter than max_len residues, and n_seqs >= 2",
+  "max_len": 150,
+  "n_families": 22,
+  "n_pairs": 187,
+  "pairing": "complete graph within each family: n_pairs == n_seqs * (n_seqs - 1) / 2",
+  "verified": {
+    "date": "2026-09-24",
+    "sources_in_agreement": [
+      "live scan of ~/bio-datasets/data/balibase/bali3pdbm via find_eligible_families(max_len=150)",
+      "~/tkf-mixdom/python/experiments/expected_balibase/expected_balibase_inf_phmm_K4_l150_withsps.json",
+      "math-paper/results/expected_balibase_tkf92_K8_tkfdp.json (L<150 subset of the 120-family run)",
+      "s3://tkf-mixdom-gpu-<AWS_ACCOUNT>/balibase-runs/v12-aws-k8-top8000/ (187 per-pair Q' results)"
+    ],
+    "note": "All four agree on the family set, n_seqs and n_pairs. Not the same as the 155-pair set in math-paper/results/downstream_fsa_K8coupled_restricted.json, which is a restriction to MixFrag's coverage for the paper-1 comparison."
+  },
+  "families": {
+    "BB11001": {
+      "n_seqs": 4,
+      "n_pairs": 6
+    },
+    "BB11013": {
+      "n_seqs": 5,
+      "n_pairs": 10
+    },
+    "BB11021": {
+      "n_seqs": 3,
+      "n_pairs": 3
+    },
+    "BB11029": {
+      "n_seqs": 3,
+      "n_pairs": 3
+    },
+    "BB11035": {
+      "n_seqs": 4,
+      "n_pairs": 6
+    },
+    "BB12014": {
+      "n_seqs": 6,
+      "n_pairs": 15
+    },
+    "BB12021": {
+      "n_seqs": 4,
+      "n_pairs": 6
+    },
+    "BB12032": {
+      "n_seqs": 5,
+      "n_pairs": 10
+    },
+    "BB12041": {
+      "n_seqs": 3,
+      "n_pairs": 3
+    },
+    "BB20001": {
+      "n_seqs": 3,
+      "n_pairs": 3
+    },
+    "BB20008": {
+      "n_seqs": 8,
+      "n_pairs": 28
+    },
+    "BB20015": {
+      "n_seqs": 4,
+      "n_pairs": 6
+    },
+    "BB20030": {
+      "n_seqs": 4,
+      "n_pairs": 6
+    },
+    "BB20033": {
+      "n_seqs": 3,
+      "n_pairs": 3
+    },
+    "BB20038": {
+      "n_seqs": 3,
+      "n_pairs": 3
+    },
+    "BB30015": {
+      "n_seqs": 5,
+      "n_pairs": 10
+    },
+    "BB30022": {
+      "n_seqs": 3,
+      "n_pairs": 3
+    },
+    "BB30025": {
+      "n_seqs": 6,
+      "n_pairs": 15
+    },
+    "BB40018": {
+      "n_seqs": 3,
+      "n_pairs": 3
+    },
+    "BB40029": {
+      "n_seqs": 9,
+      "n_pairs": 36
+    },
+    "BB40038": {
+      "n_seqs": 4,
+      "n_pairs": 6
+    },
+    "BB40045": {
+      "n_seqs": 3,
+      "n_pairs": 3
+    }
+  }
+}

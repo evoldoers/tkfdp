@@ -1,0 +1,96 @@
+%% Cover letter accompanying the MBE submission of paper 1.
+%% Built by build.sh alongside the manuscript.
+%%
+%% BEFORE SENDING, check the "Related manuscripts" paragraph.  It discloses the
+%% NeurIPS workshop version, the bioRxiv preprint and the companion MBE
+%% submission.  There is also a PSB version of this paper in ../../psb-paper;
+%% if that was submitted anywhere, MBE requires it disclosed here too.
+
+\documentclass[11pt]{article}
+\usepackage[letterpaper,top=16mm,bottom=14mm,left=22mm,right=22mm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage[hidelinks]{hyperref}
+\pagestyle{empty}
+\setlength{\parskip}{0.45em}
+\setlength{\parindent}{0pt}
+
+\begin{document}
+
+{\small
+Department of Bioengineering\\
+College of Engineering\\
+University of California, Berkeley\\
+374C Stanley Hall, Berkeley, CA 94720, USA\\
+\texttt{ihh@berkeley.edu}
+}
+
+\hfill\today
+
+Dear Editors,
+
+Please consider the enclosed manuscript, ``Closed-form Baum--Welch for
+TKF-based evolutionary models'', for publication in \emph{Molecular Biology and
+Evolution} as a Methods paper.
+
+Fitting the insertion and deletion component of a sequence evolution model has
+meant, until now, handing the likelihood to a general-purpose optimizer. We
+show that this is unnecessary. For the TKF family of indel models the
+expectation-maximization M-step has an exact closed form: the maximum
+likelihood insertion rate, deletion rate and fragment extension probability are
+functions of five expected counts, which the pair HMM forward-backward
+algorithm yields through a score identity on the birth-death-immigration
+transition probabilities. No gradient ascent or line search is involved. The
+same identity returns endpoint-conditioned counts and dwell times in closed
+form for any linear birth-death-immigration process, a result that is not
+specific to sequences. Because the sufficient statistics are additive over
+alignment columns, a corpus can be pre-aggregated into count tensors, after
+which the cost of an EM iteration no longer depends on how much data went into
+them; we fit 20,897 Pfam families this way. Applying the same machinery to two
+models with latent structure, we find that giving TKF92 a two-component mixture
+over fragment lengths buys 1.9 nats per sequence pair of held-out likelihood
+for two extra parameters, and improves multiple alignment accuracy on BAliBASE.
+
+Indel models sit underneath sequence alignment, phylogenetic inference and
+ancestral reconstruction, but in practice they are usually replaced by fixed
+gap penalties, in part because fitting them is awkward. Making the fit exact
+and cheap removes that obstacle and puts indel parameters on the same footing
+as substitution parameters, which have been fitted by EM for two decades. The
+closed-form bridge statistics should be reusable directly by anyone working
+with linear birth-death processes, which are common well beyond molecular
+evolution.
+
+Related manuscripts: an abbreviated version of this manuscript has been
+submitted for presentation at the AI for Stochastic Dynamics workshop, affiliated
+with the NeurIPS meeting in December 2026; that workshop will not publish
+proceedings. A preprint by the
+same authors, ``Nested birth--death processes are competitive with
+parameter-heavy neural networks as time-dependent models of protein
+evolution'' (bioRxiv,
+\href{https://doi.org/10.1101/2026.02.02.702952}{10.1101/2026.02.02.702952}),
+introduces the MixFrag and MixDom models and is cited in the manuscript. The
+present manuscript is about the inference algorithms and does not reuse its
+results. A companion manuscript, ``Variational inference in coupled models of
+amino acid substitution'', is being submitted to \emph{Molecular Biology and
+Evolution} at the same time; it concerns the substitution side of the model and
+its results do not overlap with these.
+
+As stated in the Acknowledgements, we used Anthropic's Claude and OpenAI's
+ChatGPT in the course of this work, to check mathematical results, write specifications,
+develop and run code, and draft text. We checked and edited all of it, and we
+are responsible for the content.
+
+The work is original, has not been published elsewhere, and is not under
+consideration by another journal. All authors have read and approved the final
+version of the manuscript. I am the corresponding author
+(\texttt{ihh@berkeley.edu}). We declare no conflict of interest.
+
+Sincerely,
+
+\vspace{1em}
+
+Ian Holmes, B.A., M.A., Ph.D.\\
+Professor, Department of Bioengineering\\
+University of California, Berkeley
+
+\end{document}

@@ -1,0 +1,95 @@
+%% Cover letter accompanying the MBE submission of paper 2.
+%% Built by build.sh alongside the manuscript.
+%%
+%% BEFORE SENDING, check the "Related manuscripts" paragraph.  It discloses the
+%% NeurIPS workshop version, the bioRxiv preprint and the companion MBE
+%% submission.  There is also a PSB version of this paper in ../../psb-paper;
+%% if that was submitted anywhere, MBE requires it disclosed here too.
+
+\documentclass[11pt]{article}
+\usepackage[letterpaper,top=16mm,bottom=14mm,left=22mm,right=22mm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage[hidelinks]{hyperref}
+\pagestyle{empty}
+\setlength{\parskip}{0.38em}
+\setlength{\parindent}{0pt}
+
+\begin{document}
+
+{\small
+Department of Bioengineering\\
+College of Engineering\\
+University of California, Berkeley\\
+374C Stanley Hall, Berkeley, CA 94720, USA\\
+\texttt{ihh@berkeley.edu}
+}
+
+\hfill\today
+
+Dear Editors,
+
+Please consider the enclosed manuscript, ``Variational inference in coupled
+models of amino acid substitution'', for publication in \emph{Molecular Biology
+and Evolution} as a Methods paper.
+
+A model of amino acid coevolution has to solve two problems at once: how to
+parameterize an interaction between sites without an explosion of free
+parameters, and how to compute a likelihood on a state space that grows
+exponentially in the number of coupled sites. We address both. Working out
+expectation-maximization for coupled continuous-time Markov chains under the
+symmetries such a model should obey, reversibility and site exchangeability, we
+find a Klein four-group structure on the flux tensor that halves the parameter
+count; the resulting pair model fits held-out structural alignment data
+slightly better than the current state of the art in coupled amino acid
+substitution models, the CherryML Q2 matrix of Prillo et al., with half as many
+parameters and similar training data. Fitting one pooled matrix, which is standard practice,
+turns out to hide most of the signal. Hydropathy and volume couplings are
+strong within individual interaction classes but flip sign between classes and
+cancel on pooling; charge is the weaker axis, but it is complementary in almost
+every class, so it is the one that survives. A mixture over interaction classes
+recovers what pooling destroys. For clusters larger than a pair we give an
+evidence lower bound built from the same sufficient statistics, in which the
+coupling contracts onto single-site bridge marginals, so the cost is polynomial
+rather than exponential in cluster size. It is closed form for pairs and
+computed by Gauss-Legendre quadrature otherwise. Against the Euler-Lagrange
+mean field of Cohn et al. (2010) it is about a hundred times faster and much
+better conditioned; their ODE system failed to converge on 30 to 40 percent of
+the pairs we tried at short branch lengths.
+
+Epistasis between contacting residues is well documented, but phylogenetic
+practice still assumes sites evolve independently, largely because coupled
+models are expensive to fit and to score. The reduction reported here makes
+coupled substitution matrices cheap enough to fit on ordinary structural
+alignment corpora, and the bound makes them cheap enough to score on clusters
+of more than two sites. The finding that pooled fitting cancels real couplings
+also bears on how coevolutionary signal is measured in the first place.
+
+Related manuscripts: an abbreviated version of this manuscript has been
+submitted for presentation at the AI for Stochastic Dynamics workshop, affiliated
+with the NeurIPS meeting in December 2026; that workshop will not publish
+proceedings. A companion
+manuscript, ``Closed-form Baum--Welch for TKF-based evolutionary models'', is
+being submitted to \emph{Molecular Biology and Evolution} at the same time. It
+concerns the insertion-deletion side of the same modeling programme and its
+results do not overlap with these.
+
+As stated in the Acknowledgements, we used Anthropic's Claude and OpenAI's
+ChatGPT in the course of this work, to check mathematical results, write
+specifications, develop and run code, and draft text. We checked and edited
+all of it, and we are responsible for the content.
+
+The work is original, has not been published elsewhere, and is not under
+consideration by another journal. All authors have read and approved the final
+version of the manuscript. I am the corresponding author
+(\texttt{ihh@berkeley.edu}). We declare no conflict of interest.
+
+Sincerely,
+
+\vspace{1em}
+
+Ian Holmes, B.A., M.A., Ph.D.\\
+Professor, Department of Bioengineering\\
+University of California, Berkeley
+
+\end{document}

@@ -1,0 +1,66 @@
+{
+  "method_name": "tkf92_LG_one",
+  "indel": "tkf92",
+  "indel_params": {
+    "lam": 0.045805950961442965,
+    "mu": 0.04679949003914898,
+    "exts": [
+      0.6834551539557077
+    ],
+    "weights": [
+      1.0
+    ]
+  },
+  "subst": "LG",
+  "gamma": null,
+  "clock": "one",
+  "em_rounds": 1,
+  "tmax_sub": 10.0,
+  "newton_sub": 5,
+  "n_families": 120,
+  "mean_sp_g1": 0.7764549034532958,
+  "mean_tc_g1": 0.6216239963424514,
+  "mean_sp_g0": 0.7819722445185568,
+  "mean_tc_g0": 0.6282920830994302,
+  "n_scored_g1": 120,
+  "corpus_post": {
+    "micro": {
+      "e_tp": 77284.47220311617,
+      "total_mass": 423542.1359982094,
+      "gold": 110627,
+      "n_cells": 188526005
+    },
+    "n_families": 120,
+    "n_pairs_total": 1686
+  },
+  "corpus_hard": {
+    "micro": {
+      "e_tp": 92302.0,
+      "total_mass": 378549.0,
+      "gold": 110627,
+      "n_cells": 188526005
+    },
+    "n_families": 120,
+    "n_pairs_total": 1686
+  },
+  "corpus_opt": {
+    "micro": {
+      "e_tp": 84913.0,
+      "total_mass": 438649.0,
+      "gold": 110627,
+      "n_cells": 188526005
+    },
+    "n_families": 120,
+    "n_pairs_total": 1686
+  },
+  "corpus_fsa_sps": {
+    "micro": {
+      "e_tp": 92796.0,
+      "total_mass": 390921.0,
+      "gold": 110627,
+      "n_cells": 188526005
+    },
+    "n_families": 120,
+    "n_pairs_total": 1686
+  }
+}
