@@ -1,0 +1,70 @@
+{
+  "method_name": "tkf92_CML20_anchor",
+  "indel": "tkf92",
+  "indel_params": {
+    "lam": 0.04428,
+    "mu": 0.04521,
+    "exts": [
+      0.677
+    ],
+    "weights": [
+      1.0
+    ]
+  },
+  "subst": "CML20",
+  "mixfrag_s_npz": null,
+  "gamma": null,
+  "clock": "anchor",
+  "em_rounds": 1,
+  "tmax_sub": 10.0,
+  "newton_sub": 5,
+  "gap_open_cap": null,
+  "gap_open_fix": null,
+  "cache_name": "tkf92_CML20pc_anchor__bali3pdbm",
+  "n_families": 120,
+  "mean_sp_g1": 0.7836809539488131,
+  "mean_tc_g1": 0.6305531916396947,
+  "mean_sp_g0": 0.795382446027476,
+  "mean_tc_g0": 0.6471367358300877,
+  "n_scored_g1": 120,
+  "corpus_post": {
+    "micro": {
+      "e_tp": 77610.73892032188,
+      "total_mass": 431828.5630958973,
+      "gold": 110627,
+      "n_cells": 188526005
+    },
+    "n_families": 120,
+    "n_pairs_total": 1686
+  },
+  "corpus_hard": {
+    "micro": {
+      "e_tp": 92149.0,
+      "total_mass": 386039.0,
+      "gold": 110627,
+      "n_cells": 188526005
+    },
+    "n_families": 120,
+    "n_pairs_total": 1686
+  },
+  "corpus_opt": {
+    "micro": {
+      "e_tp": 85714.0,
+      "total_mass": 444095.0,
+      "gold": 110627,
+      "n_cells": 188526005
+    },
+    "n_families": 120,
+    "n_pairs_total": 1686
+  },
+  "corpus_fsa_sps": {
+    "micro": {
+      "e_tp": 92758.0,
+      "total_mass": 395094.0,
+      "gold": 110627,
+      "n_cells": 188526005
+    },
+    "n_families": 120,
+    "n_pairs_total": 1686
+  }
+}

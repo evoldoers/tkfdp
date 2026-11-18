@@ -33,6 +33,12 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 
 import tkf_trajectory as tkftraj
+
+IMMORTAL_X = 0.55       # x of the immortal link's D(T,T) -> eps (left of col 1)
+IMMORTAL_XLO = 0.3      # left x-limit in --immortal-link mode
+TREE_FONT_SCALE = 1.0   # set from --tree-font-scale in main()
+GEOM_SCALE = 1.0        # set from --geom-scale in main()
+HEIGHT_SCALE = 1.0      # set from --height-scale in main()
 from tkf_trajectory import (
     parse_input,
     set_parents,
@@ -71,13 +77,15 @@ def _link_layout(node):
         terminal = 'G_{' + tau_expr(b, d) + '}'
         T_loc = tau_expr(b, d)
     terminal_leaf = {'label': terminal, 'children': [], 'col': node['col']}
-    d_subtree = _d_layout(node['children'], t_exp, T_loc)
+    d_subtree = _d_layout(node['children'], t_exp, T_loc, b)
     return {'label': L_label,
             'children': [terminal_leaf, d_subtree],
             'col': node['col']}
 
 
-def _d_layout(children, t_obs, T_loc):
+def _d_layout(children, t_obs, T_loc, parent_b=0):
+    # Children are latest-born first; D(t,T) -> L(t-u) . D(t,u), so the
+    # window for the earlier children shrinks to the most recent birth.
     D_label = f'D({t_obs},\\, {T_loc})'
     if not children:
         eps = {'label': '\\varepsilon', 'children': [], 'col': None}
@@ -85,7 +93,9 @@ def _d_layout(children, t_obs, T_loc):
     first, rest = children[0], children[1:]
     return {'label': D_label,
             'children': [_link_layout(first),
-                         _d_layout(rest, t_obs, T_loc)],
+                         _d_layout(rest, t_obs,
+                                   tau_expr(parent_b, first['birth_idx']),
+                                   parent_b)],
             'col': None}
 
 
@@ -101,8 +111,31 @@ def _s_layout(forest):
             'col': None}
 
 
-def build_parse_tree_layout(forest):
-    """Top-level: return the root layout node."""
+def _r_layout(forest):
+    # R -> L(T) . R  |  epsilon: the ancestral (mortal) links, in order.
+    if not forest:
+        eps = {'label': '\\varepsilon', 'children': [], 'col': None}
+        return {'label': 'R', 'children': [eps], 'col': None}
+    return {'label': 'R',
+            'children': [_link_layout(forest[0]), _r_layout(forest[1:])],
+            'col': None}
+
+
+def build_parse_tree_layout(forest, immortal=False):
+    """Top-level: return the root layout node.
+
+    immortal=True uses the full top-level grammar
+        S -> D(T,T) . R,   R -> L(T) . R  |  epsilon,
+    with the immortal link's children D(T,T) drawn at column 0. The
+    immortal link's spawned top-level insertions are not supported in
+    this mode (none in the canonical example), so D(T,T) -> epsilon."""
+    if immortal:
+        eps = {'label': '\\varepsilon', 'children': [], 'col': None,
+               'fixed': True}
+        d_imm = {'label': 'D(T,\\, T)', 'children': [eps], 'col': None,
+                 'fixed': True}
+        return {'label': 'S', 'children': [d_imm, _r_layout(forest)],
+                'col': None, 'immortal': True}
     if len(forest) == 1:
         return _link_layout(forest[0])
     return _s_layout(forest)
@@ -264,7 +297,20 @@ def _assign_internal_x(root):
     its lineage column, each spawning D sits over the spawned L,
     and each terminating D sits one half-column past the rightmost
     descendant placed so far."""
-    if root['label'].startswith('L'):
+    if root.get('immortal'):
+        d_imm, r = root['children']
+        d_imm['x'] = IMMORTAL_X
+        d_imm['children'][0]['x'] = IMMORTAL_X
+        first = r['children'][0]
+        if first['label'] == '\\varepsilon':
+            r['x'] = 0.5
+            first['x'] = 0.5
+        else:
+            _layout_L(first)
+            r['x'] = first['x']
+            _layout_s_chain(r['children'][1], first['x'])
+        root['x'] = 0.5 * (d_imm['x'] + r['x'])
+    elif root['label'].startswith('L'):
         _layout_L(root)
     elif root['label'] == 'S':
         # Top-level S-chain. Initial last_x = the first spawned L's col
@@ -312,7 +358,7 @@ def _spread_terminating_ds(root, max_spread=0.4):
 
     def walk(node):
         ch = node.get('children') or []
-        if ch and ch[0].get('label') == '\\varepsilon':
+        if ch and ch[0].get('label') == '\\varepsilon' and not node.get('fixed'):
             terms.append(node)
         for c in ch:
             walk(c)
@@ -351,7 +397,6 @@ def layout_parse_tree(root):
     leaves = _assign_leaf_x_anchored(root)
     _assign_internal_x(root)
     _assign_y(root)
-    _spread_terminating_ds(root)
     return leaves
 
 
@@ -382,32 +427,131 @@ def _format_node_label(raw_label):
 # Render the parse tree onto an Axes
 # ---------------------------------------------------------------------------
 
-def draw_parse_tree_on_ax(ax, root, *, font_size=7.5, arrow_color='0.25'):
-    """Render the laid-out parse tree onto ax. Caller sets xlim/ylim."""
-    def walk(node):
-        for c in node['children']:
-            ax.annotate(
-                '', xy=(c['x'], c['y']), xytext=(node['x'], node['y']),
-                arrowprops=dict(arrowstyle='-|>', mutation_scale=6,
-                                color=arrow_color, lw=0.6,
-                                shrinkA=8, shrinkB=8),
-                zorder=2,
-            )
-            walk(c)
-        ax.text(node['x'], node['y'],
-                _format_node_label(node['label']),
-                ha='center', va='center',
-                fontsize=font_size,
-                zorder=3)
+def _resolve_row_overlaps(nodes, gap=0.08, max_shift=0.45, sweeps=60):
+    """Push apart labels that overlap within a row of the tree.
 
-    walk(root)
+    Only terminating nodes (X -> epsilon) move, together with their
+    epsilon child; nodes anchored to a trajectory column, and spawning
+    D/R nodes that sit over the link they spawn, stay put. Each node's
+    '_box' (data coords) and '_text' must already be set."""
+    rows = {}
+    for n in nodes:
+        rows.setdefault(n['y'], []).append(n)
+    unit_of = {}
+    for n in nodes:
+        ch = n['children']
+        if ch and ch[0]['label'] == '\\varepsilon' and not n.get('fixed'):
+            unit = [n, ch[0]]
+            for m in unit:
+                unit_of[id(m)] = unit
+    home = {id(n): n['x'] for n in nodes}
+
+    def shift(unit, d):
+        for m in unit:
+            m['x'] += d
+            x0, x1, y0, y1 = m['_box']
+            m['_box'] = (x0 + d, x1 + d, y0, y1)
+
+    def can(unit, d):
+        return all(abs(m['x'] + d - home[id(m)]) <= max_shift for m in unit)
+
+    for _ in range(sweeps):
+        moved = False
+        for row in rows.values():
+            row.sort(key=lambda n: n['x'])
+            for a, b in zip(row, row[1:]):
+                over = a['_box'][1] + gap - b['_box'][0]
+                if over <= 1e-6:
+                    continue
+                ua, ub = unit_of.get(id(a)), unit_of.get(id(b))
+                if ua is ub and ua is not None:
+                    continue
+                step = over + 1e-3
+                if ua and ub:
+                    if can(ua, -step / 2) and can(ub, step / 2):
+                        shift(ua, -step / 2); shift(ub, step / 2); moved = True
+                elif ub and can(ub, step):
+                    shift(ub, step); moved = True
+                elif ua and can(ua, -step):
+                    shift(ua, -step); moved = True
+        if not moved:
+            break
+    for n in nodes:
+        n['_text'].set_x(n['x'])
+
+
+def draw_parse_tree_on_ax(ax, root, *, font_size=None, arrow_color='0.25'):
+    """Render the laid-out parse tree onto ax. Caller sets xlim/ylim."""
+    fs = tkftraj.FONT_SCALE
+    if font_size is None:
+        font_size = 7.5 * TREE_FONT_SCALE
+
+    # Draw the labels first, measure each one's box in data coordinates,
+    # then draw each arrow between the edges of the two boxes (plus a small
+    # gap), so arrows neither overlap labels nor stop short of small ones.
+    # Data coordinates do not depend on the output dpi. The caller must set
+    # the axis limits (and inversion) before calling this.
+    texts = []
+
+    def place(node):
+        node['_text'] = ax.text(node['x'], node['y'],
+                                _format_node_label(node['label']),
+                                ha='center', va='center',
+                                fontsize=font_size, zorder=3)
+        texts.append(node)
+        for c in node['children']:
+            place(c)
+
+    place(root)
+    fig = ax.figure
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    inv = ax.transData.inverted()
+    for n in texts:
+        bb = n['_text'].get_window_extent(renderer)
+        (xa, ya), (xb, yb) = inv.transform([[bb.x0, bb.y0], [bb.x1, bb.y1]])
+        n['_box'] = (min(xa, xb), max(xa, xb), min(ya, yb), max(ya, yb))
+
+    _resolve_row_overlaps(texts)
+
+    def exit_param(box, x0, y0, dx, dy, pad):
+        """Smallest s>0 at which (x0,y0)+s(dx,dy) leaves the padded box."""
+        bx0, bx1, by0, by1 = box
+        px = (bx1 - bx0) * pad + 0.03
+        py = (by1 - by0) * pad + 0.03
+        ss = []
+        if dx > 0: ss.append((bx1 + px - x0) / dx)
+        if dx < 0: ss.append((bx0 - px - x0) / dx)
+        if dy > 0: ss.append((by1 + py - y0) / dy)
+        if dy < 0: ss.append((by0 - py - y0) / dy)
+        return min(ss) if ss else 0.0
+
+    def connect(node):
+        for c in node['children']:
+            x0, y0, x1, y1 = node['x'], node['y'], c['x'], c['y']
+            dx, dy = x1 - x0, y1 - y0
+            sa = exit_param(node['_box'], x0, y0, dx, dy, 0.05)
+            sb = exit_param(c['_box'], x1, y1, -dx, -dy, 0.05)
+            if sa + sb < 1.0:
+                ax.annotate(
+                    '', xy=(x1 - sb * dx, y1 - sb * dy),
+                    xytext=(x0 + sa * dx, y0 + sa * dy),
+                    arrowprops=dict(arrowstyle='-|>', mutation_scale=6 * fs,
+                                    color=arrow_color, lw=0.6 * fs,
+                                    shrinkA=0, shrinkB=0),
+                    zorder=2,
+                )
+            connect(c)
+
+    connect(root)
 
 
 # ---------------------------------------------------------------------------
 # Master draw
 # ---------------------------------------------------------------------------
 
-def draw_uber_figure(forest, n_events, output_path, lottery_seed=None):
+def draw_uber_figure(forest, n_events, output_path, lottery_seed=None,
+                     immortal=False):
     """Compose parse tree (top) + trajectory (middle) + lottery (bottom)
     into ONE matplotlib figure with a single shared x-axis. Each terminal
     A / G_tau leaf in the parse tree sits directly above its trajectory
@@ -418,7 +562,7 @@ def draw_uber_figure(forest, n_events, output_path, lottery_seed=None):
     max_col = max(n['col'] for n in nodes)
 
     # 1) Build + lay out the parse tree.
-    root = build_parse_tree_layout(forest)
+    root = build_parse_tree_layout(forest, immortal=immortal)
     leaves = layout_parse_tree(root)
     tree_depth = _depth(root)
     tree_x_max = max(lf['x'] for lf in leaves)
@@ -428,14 +572,21 @@ def draw_uber_figure(forest, n_events, output_path, lottery_seed=None):
     #    its rightmost leaf sits at tree_x_max ~ max_col + a small
     #    overflow from trailing ε's. We accommodate the overflow in
     #    fig width.
-    inch_per_col = 1.55   # wider columns: trees labels (D(...), L(...))
+    inch_per_col = 1.55 * GEOM_SCALE   # wider columns: trees labels (D(...), L(...))
                           # at deep levels need more horizontal room
                           # than the trajectory's MIDG markers. ~15%
                           # bump tidies remaining label collisions
                           # without forcing a noticeably bigger fig.
     margin_left = 1.4
     margin_right = 0.5
-    panel_w = max(max_col, tree_x_max) * inch_per_col + 1.5
+    x_lo = IMMORTAL_XLO if immortal else 0.5
+    # Widen the panel by the extra gutter so the columns keep their width.
+    # Right limit leaves room for terminating nodes that the overlap pass
+    # (_resolve_row_overlaps) shifts right by up to 0.45 column.
+    x_hi = max(max_col + 0.5, tree_x_max + 0.25)
+    if immortal:
+        x_hi = max(max_col + 0.5, tree_x_max) + 0.5
+    panel_w = (x_hi - x_lo) * inch_per_col + (1.5 - 0.5 * inch_per_col if not immortal else 0.75)
     fig_w = margin_left + panel_w + margin_right
 
     # Heights: tuned so the figure fills a portrait letter [p] float
@@ -445,8 +596,8 @@ def draw_uber_figure(forest, n_events, output_path, lottery_seed=None):
     # parse tree LEGIBLE: each tree depth-step is generous (0.55"+),
     # the trajectory is comfortable, and the figure naturally
     # occupies a full page once LaTeX scales it down to fit width.
-    h_tree = max(8.0, 0.55 * (tree_depth + 1) + 1.0)
-    h_traj = max(5.0, 1.4 + 0.50 * (n_events + 1))
+    h_tree = max(8.0, 0.55 * GEOM_SCALE * (tree_depth + 1) + 1.0)
+    h_traj = HEIGHT_SCALE * max(5.0, 1.4 + 0.50 * (n_events + 1))
     h_lottery = 3.0 if lottery_seed is not None else 0.0
     fig_h = h_tree + h_traj + h_lottery
 
@@ -463,10 +614,10 @@ def draw_uber_figure(forest, n_events, output_path, lottery_seed=None):
     # 3) Draw parse tree. Shared x-axis with trajectory. xlim starts at
     # 0.5 (one half-column left of col 1) since the immortal-link gutter
     # at col 0 has been reclaimed.
-    draw_parse_tree_on_ax(ax_tree, root)
-    ax_tree.set_xlim(0.5, max(max_col + 0.5, tree_x_max + 0.25))
+    ax_tree.set_xlim(x_lo, x_hi)
     ax_tree.set_ylim(-0.6, tree_depth + 0.6)
     ax_tree.invert_yaxis()
+    draw_parse_tree_on_ax(ax_tree, root)
     ax_tree.set_xticks([]); ax_tree.set_yticks([])
     for side in ('left', 'right', 'top', 'bottom'):
         ax_tree.spines[side].set_visible(False)
@@ -482,7 +633,7 @@ def draw_uber_figure(forest, n_events, output_path, lottery_seed=None):
         show_immortal_link=False,
     )
     assert max_col2 == max_col
-    ax_traj.set_xlim(0.5, max(max_col + 0.5, tree_x_max + 0.25))
+    ax_traj.set_xlim(x_lo, x_hi)
     ax_traj.set_ylim(Y_TOP - 0.4, lottery_bottom)
     ax_traj.invert_yaxis()
 
@@ -521,17 +672,43 @@ def main():
     p.add_argument('--lottery-seed', type=int, default=None,
                    help='RNG seed for lottery-ticket IDs and MATCH pair. '
                         'Default: no lottery row.')
+    p.add_argument('--font-scale', type=float, default=1.0,
+                   help='Multiply font sizes, line widths and marker sizes '
+                        '(default 1.0 reproduces the original figure).')
+    p.add_argument('--tree-font-scale', type=float, default=None,
+                   help='Font scale for the parse-tree labels (default: '
+                        'same as --font-scale).')
+    p.add_argument('--geom-scale', type=float, default=1.0,
+                   help='Multiply column width and parse-tree level height '
+                        '(default 1.0).')
+    p.add_argument('--height-scale', type=float, default=1.0,
+                   help='Multiply the trajectory panel height, e.g. < 1 for '
+                        'a landscape figure (default 1.0).')
+    p.add_argument('--immortal-link', action='store_true',
+                   help='Draw the full top-level grammar S -> D(T,T) R, '
+                        'R -> L(T) R | eps, with the (empty) immortal link '
+                        'at column 0 of the trajectory.')
     p.add_argument('--label-order', choices=['spatial', 'temporal'],
                    default='spatial',
                    help="t_k subscript convention (see tkf_trajectory.py).")
     args = p.parse_args()
 
+    global TREE_FONT_SCALE, GEOM_SCALE, HEIGHT_SCALE
+    tkftraj.FONT_SCALE = args.font_scale
+    TREE_FONT_SCALE = (args.tree_font_scale if args.tree_font_scale is not None
+                       else args.font_scale)
+    GEOM_SCALE = args.geom_scale
+    HEIGHT_SCALE = args.height_scale
     forest = parse_input(args.sequence)
     if not forest:
         print('Empty or invalid input.', file=sys.stderr)
         sys.exit(1)
     set_parents(forest)
     assign_columns(forest)
+    if args.immortal_link and any(n['type'] == 'I' for n in forest):
+        print('--immortal-link: top-level insertions (children of the '
+              'immortal link) are not supported.', file=sys.stderr)
+        sys.exit(1)
     rng = random.Random(args.seed)
     n_events = assign_times(forest, rng, label_order=args.label_order)
 
@@ -545,12 +722,14 @@ def main():
         png_path = out_path + '.png'
 
     draw_uber_figure(forest, n_events, out_path,
-                     lottery_seed=args.lottery_seed)
+                     lottery_seed=args.lottery_seed,
+                     immortal=args.immortal_link)
     print(f'Figure written to {out_path}', file=sys.stderr)
 
     if png_path is not None:
         draw_uber_figure(forest, n_events, png_path,
-                         lottery_seed=args.lottery_seed)
+                         lottery_seed=args.lottery_seed,
+                         immortal=args.immortal_link)
         print(f'PNG mirror written to {png_path}', file=sys.stderr)
 
 

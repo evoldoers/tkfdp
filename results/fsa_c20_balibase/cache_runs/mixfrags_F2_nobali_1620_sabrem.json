@@ -1,0 +1,69 @@
+{
+  "method_name": "mixfrag_s_svibw_mixfrags_F2_nobali_1620_one",
+  "indel": "mixfrag_s",
+  "indel_params": {
+    "lam": 0.052109140690323,
+    "mu": 0.05347504149573857,
+    "exts": [
+      0.48096179231265523,
+      0.9023510455398643
+    ],
+    "weights": [
+      0.7768088036746977,
+      0.22319119632530227
+    ]
+  },
+  "subst": "mixfrag_s",
+  "mixfrag_s_npz": "/home/yam/tkf-mixdom/python/pfam/svibw_mixfrags_F2_nobali_1620.npz",
+  "gamma": null,
+  "clock": "one",
+  "em_rounds": 1,
+  "tmax_sub": 10.0,
+  "newton_sub": 5,
+  "n_families": 303,
+  "mean_sp_g1": 0.6370351881174415,
+  "mean_tc_g1": 0.45133305887847364,
+  "mean_sp_g0": 0.6504490879659276,
+  "mean_tc_g0": 0.46800652231054335,
+  "n_scored_g1": 303,
+  "corpus_post": {
+    "micro": {
+      "e_tp": 102424.44083095642,
+      "total_mass": 781730.6392258343,
+      "gold": 171890,
+      "n_cells": 219453479
+    },
+    "n_families": 303,
+    "n_pairs_total": 5558
+  },
+  "corpus_hard": {
+    "micro": {
+      "e_tp": 123495.0,
+      "total_mass": 673814.0,
+      "gold": 171890,
+      "n_cells": 219453479
+    },
+    "n_families": 303,
+    "n_pairs_total": 5558
+  },
+  "corpus_opt": {
+    "micro": {
+      "e_tp": 114494.0,
+      "total_mass": 829370.0,
+      "gold": 171890,
+      "n_cells": 219453479
+    },
+    "n_families": 303,
+    "n_pairs_total": 5558
+  },
+  "corpus_fsa_sps": {
+    "micro": {
+      "e_tp": 125581.0,
+      "total_mass": 709617.0,
+      "gold": 171890,
+      "n_cells": 219453479
+    },
+    "n_families": 303,
+    "n_pairs_total": 5558
+  }
+}

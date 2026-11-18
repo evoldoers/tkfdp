@@ -1,0 +1,72 @@
+{
+  "method_name": "mixfrag_GTR_one",
+  "indel": "mixfrag",
+  "indel_params": {
+    "lam": 0.04645159361484088,
+    "mu": 0.04747838153710662,
+    "exts": [
+      0.4307407767585113,
+      0.8558260528890574
+    ],
+    "weights": [
+      0.7097808771217816,
+      0.2902191228782184
+    ]
+  },
+  "subst": "GTR",
+  "mixfrag_s_npz": null,
+  "gamma": null,
+  "clock": "one",
+  "em_rounds": 1,
+  "tmax_sub": 10.0,
+  "newton_sub": 5,
+  "gap_open_cap": null,
+  "gap_open_fix": null,
+  "cache_name": "paramcheck_mixfragfit_GTR_one__bali3pdbm",
+  "n_families": 120,
+  "mean_sp_g1": 0.7982327730996509,
+  "mean_tc_g1": 0.6502495086493362,
+  "mean_sp_g0": 0.8077412653063313,
+  "mean_tc_g0": 0.6642221526719585,
+  "n_scored_g1": 120,
+  "corpus_post": {
+    "micro": {
+      "e_tp": 81396.30128733131,
+      "total_mass": 419435.58992082,
+      "gold": 110627,
+      "n_cells": 188526005
+    },
+    "n_families": 120,
+    "n_pairs_total": 1686
+  },
+  "corpus_hard": {
+    "micro": {
+      "e_tp": 93981.0,
+      "total_mass": 383736.0,
+      "gold": 110627,
+      "n_cells": 188526005
+    },
+    "n_families": 120,
+    "n_pairs_total": 1686
+  },
+  "corpus_opt": {
+    "micro": {
+      "e_tp": 88466.0,
+      "total_mass": 434813.0,
+      "gold": 110627,
+      "n_cells": 188526005
+    },
+    "n_families": 120,
+    "n_pairs_total": 1686
+  },
+  "corpus_fsa_sps": {
+    "micro": {
+      "e_tp": 94594.0,
+      "total_mass": 391235.0,
+      "gold": 110627,
+      "n_cells": 188526005
+    },
+    "n_families": 120,
+    "n_pairs_total": 1686
+  }
+}

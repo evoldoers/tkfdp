@@ -38,6 +38,11 @@ import random
 import sys
 from collections import defaultdict
 
+# Multiplies font sizes, line widths and marker sizes. 1.0 reproduces the
+# original figures; larger values give legible text when the figure is
+# scaled down to a journal column (tkf_trajectory_uber.py --font-scale).
+FONT_SCALE = 1.0
+
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from matplotlib.patches import FancyBboxPatch, PathPatch
@@ -376,7 +381,7 @@ def _draw_lottery_row(ax, forest, n_events, lottery_seed):
             linestyle=(0, (3, 2)), zorder=4))
         ax.text(col, (y_t0 + y_t1) / 2, f'{ids[col - 1]:03d}',
                 ha='center', va='center',
-                fontweight='bold', fontsize=9, family='monospace',
+                fontweight='bold', fontsize=9 * FONT_SCALE, family='monospace',
                 zorder=5)
 
     if match_i != match_j:
@@ -438,8 +443,8 @@ def draw_trajectory_on_ax(ax, forest, n_events, lottery_seed=None,
         ax.plot([0, 0], [Y_TOP, Y_BOT], linestyle=(0, (4, 3)),
                 color='0.4', linewidth=1.0, zorder=1)
 
-    LW = 1.7
-    MS = 9
+    LW = 1.7 * FONT_SCALE
+    MS = 9 * FONT_SCALE
 
     for n in nodes:
         col = n['col']
@@ -502,7 +507,7 @@ def draw_trajectory_on_ax(ax, forest, n_events, lottery_seed=None,
         ylabels.append(rf'$t_{{{lab}}}$')
     ylabels.append(r'$T$')
     ax.set_yticks(yticks)
-    ax.set_yticklabels(ylabels)
+    ax.set_yticklabels(ylabels, fontsize=10 * FONT_SCALE)
 
     if show_column_labels:
         # x-tick labels: column types (M/I/D/G).
@@ -510,7 +515,7 @@ def draw_trajectory_on_ax(ax, forest, n_events, lottery_seed=None,
         xticks = list(range(1, max_col + 1))
         xlabels = [type_by_col[c] for c in xticks]
         ax.set_xticks(xticks)
-        ax.set_xticklabels(xlabels, fontweight='bold', fontsize=11)
+        ax.set_xticklabels(xlabels, fontweight='bold', fontsize=11 * FONT_SCALE)
         if column_xticks_top:
             ax.xaxis.tick_top()
         ax.tick_params(axis='x', length=0, pad=6)
@@ -522,7 +527,7 @@ def draw_trajectory_on_ax(ax, forest, n_events, lottery_seed=None,
     for side in ('right', 'top', 'bottom'):
         ax.spines[side].set_visible(False)
 
-    ax.set_ylabel('time', labelpad=10)
+    ax.set_ylabel('time', labelpad=10, fontsize=11 * FONT_SCALE)
 
     return max_col, Y_TOP, Y_BOT, lottery_bottom
 
@@ -582,17 +587,21 @@ def link_forest(node, indent=2):
     ind = ' ' * indent
     out = [f'{ind}[{_N(f"$L({t_exp})$")}']
     out.append(f'{ind}  [{_N(f"${terminal}$")}]')
-    out.append(d_forest(node['children'], t_exp, T_loc, indent + 2))
+    out.append(d_forest(node['children'], t_exp, T_loc, indent + 2, b))
     out.append(f'{ind}]')
     return '\n'.join(out)
 
 
-def d_forest(children, t_obs, T_loc, indent):
+def d_forest(children, t_obs, T_loc, indent, parent_b=0):
     """
     Forest LaTeX for a D(t_obs, T_loc) subtree producing a list of children.
 
     The grammar expands D iteratively, so each child adds one level of
     left-deep nesting of D non-terminals, terminating with epsilon.
+    Children are listed latest-born first (each new link is inserted
+    immediately to the right of its parent), and the production is
+    D(t,T) -> L(t-u) . D(t,u): after the most recent child, born u time
+    units after the parent, the remaining window shrinks to (0,u).
     """
     ind = ' ' * indent
     d_label = _N(f'$D({t_obs},\\, {T_loc})$')
@@ -603,7 +612,8 @@ def d_forest(children, t_obs, T_loc, indent):
     first, rest = children[0], children[1:]
     out = [f'{ind}[{d_label}']
     out.append(link_forest(first, indent + 2))
-    out.append(d_forest(rest, t_obs, T_loc, indent + 2))
+    out.append(d_forest(rest, t_obs, tau_expr(parent_b, first['birth_idx']),
+                        indent + 2, parent_b))
     out.append(f'{ind}]')
     return '\n'.join(out)
 
